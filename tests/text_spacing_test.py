@@ -28,7 +28,7 @@ import gen_aa_font as gf  # noqa: E402
 SS = 16
 LOWER = ["oeo", "coco", "eco", "nono", "minimum", "hello", "level", "decay", "release", "sound", "Pitch", "Cutoff",
          "doob", "bdpq", "occasion", "accessed", "Resonance", "Envelope", "Attack", "Sustain", "Volume", "Tempo",
-         "Swing", "Pattern", "Chance", "Multi-engine synthesizer", "H\xfcgelton Instruments", "Hello world",
+         "Swing", "Pattern", "Chance", "Sequencer-first Felucca fork", "H\xfcgelton Instruments", "Hello world",
          "Mixed case text", "Glide", "Drive", "Feedback", "Motion", "Phrases", "Song", "Mixer", "Calibration"]
 UPPER = ["CUTOFF", "RESO", "LEVEL", "DECAY", "RELEASE", "SOUND", "OCOE", "COCO", "NONO", "MINIMUM", "SUPER SAW",
          "FELUCCA", "PRESETS", "ANALOG", "DIGITAL", "PITCH", "SWING", "AV AW LT TA YO"]
