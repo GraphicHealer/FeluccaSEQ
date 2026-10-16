@@ -99,7 +99,7 @@ Ideas, roughly by payoff against UI cost — **capacity first** (decided), the r
 
 ## Plan
 
-1. Fork `hugelton/Felucca` — done (`GraphicHealer/FeluccaSEQ`). Keep `main` close to upstream and work on a `seq` branch; with upstream dormant, merges will be rare and cheap.
+1. Fork `hugelton/Felucca` — done (`GraphicHealer/FeluccaSEQ`). Work happens on `main` directly (the `seq` branch was folded in; upstream is dormant, so merge hygiene matters less). Upstream tags/merges still possible if a maintenance release lands.
 2. Build stock on the Linux box: `git submodule update --init`, `pip3 install Pillow fonttools`, `tools/get_toolchain.sh`, clone the AC79 SDK (gitee, tag `AC79NN_SDK_V1.2.1_2023-12-13`), then `./build.sh` and `tests/run_tests.sh` for a green baseline.
 3. Build a repeatable size report (flash and static RAM per symbol — `size_fns.py` is an optimizer, not a reporter; use linker `-Map` + `nm`) and a host test that prints `sizeof` for the step, pattern, track and project structs.
 4. Rebrand visible strings only (ABOUT, INFO, version). Do not rename internals, since that makes every upstream merge a conflict. Stamp builds with `./build.sh --release 1.0-seq` (numeric `X.Y` required; gives `FM-1_910` / `v1.0-seq`).
