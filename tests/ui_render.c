@@ -1666,7 +1666,7 @@ static void draw(int s)
                         if (x - q0 < ix) ix = x - q0;
                         if (y - q0 < iy) iy = y - q0;
                     }
-            if (bad || ix != 16 || iy != 16) {
+            if (bad || ix != 16 || iy < 15 || iy > 16) {   /* 15: the round caps S Q ink 1 px over the cap line */
                 if (rep) fprintf(rep, "FIND %-26s the splash square not whole (edges %s) or its text not 16 px in (left %d, top %d)\n",
                                  cur_name, bad ? "off" : "ok", (int)ix, (int)iy);
                 nfind++;

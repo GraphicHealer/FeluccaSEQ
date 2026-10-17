@@ -199,7 +199,7 @@ OUT=build/host
 mkdir -p "$OUT"
 CC="${CC:-cc} -O1 -Wall -Wno-unused-function"
 fail=0
-run() { echo "== $1"; shift; "$@" || fail=1; }
+run() { local name=$1; echo "== $1"; shift; "$@" || { local rc=$?; fail=1; echo "FAILED (exit $rc): $name"; }; }
 
 $CC -o "$OUT/storage_test" tests/storage_test.c
 run "flash storage (A/B, torn writes)" "$OUT/storage_test"
@@ -437,9 +437,11 @@ if [ -f build/gen/felucca_tables.h ]; then
         $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/slice_test" tests/slice_test.c -lm
         run "SLICE: tables, onsets, reverse, keys, modes, MAN slices and their store, demos" "$OUT/slice_test" \
             build/slice_demo/loop build/slice_demo
-    else
-        echo "== SLICE: build/ was made with FELUCCA_SLICE=0 (no BREAK); run ./build.sh without it first"
+    elif [ "${FELUCCA_SLICE:-0}" = "1" ]; then
+        echo "== SLICE: FELUCCA_SLICE=1 but build/ has no BREAK; run ./build.sh with it set first"
         fail=1
+    else
+        echo "== skip SLICE (FELUCCA_SLICE=0, the FeluccaSEQ default)"
     fi
     # SAMPLE's PIANO (1.5: as 1.1.5), SLICE's PIANO (its middle C zone), 1.2's PIANO HD in a user slot
     if grep -q '^    {"PIANO", 0, 5},' build/gen/felucca_samples.h; then
@@ -449,7 +451,7 @@ if [ -f build/gen/felucca_tables.h ]; then
         run "SAMPLE: PIANO (5 zones as 1.1.5: splits, pitch, length, GRAIN), SLICE's PIANO, a PIANO HD slot" "$OUT/sample_test" \
             build/piano_hd/PIANO_HD build/sample_demo
     else
-        echo "== skip SAMPLE's PIANO (no CC0 library: assets/samples-cc0, tools/fetch_cc0.py)"
+        echo "== skip SAMPLE's PIANO (no built-in sets: FELUCCA_CC0=0, the FeluccaSEQ default)"
     fi
 else
     echo "== skip hostsim (run ./build.sh once)"
