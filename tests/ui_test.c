@@ -488,6 +488,7 @@ static int test_sound_loads(void)
     project_load(1);
     bad += check("a project load drops the copy and takes none", undo.trk == 0 && undo_depth == 0);
     ui_power_on();
+#if SMP_BUILTINS                          /* FeluccaSEQ: no built-in sets (FELUCCA_CC0=0): these are PIANO-set checks */
     bad += check("SAMPLE factory browsing has four melodic presets and no PERC",
                  ENGINES[4]->npresets == 4u && str_eq(ENGINES[4]->presets[0].name, "PIANO") &&
                  str_eq(ENGINES[4]->presets[3].name, "SAX"));
@@ -516,6 +517,7 @@ static int test_sound_loads(void)
                      str_eq(sd->names[7], "USR3") && sd->max == 7 &&
                      enum_orig(&ENGINES[8]->edit[0], SMP_SET_PERC) == 0 && SMP_SETS[SMP_SET_PERC].z0 == SMP_SETS[0].z0);
     }
+#endif
     host_legacy_sample_perc(t);                /* SAMPLE PERC (SET 4, retired after 1.0.2): every load gives DRUM */
     t->preset = 4;                             /* a project written before the factory removal */
     my_steps(t);
@@ -1448,7 +1450,8 @@ static int test_categories(void)
     bad += check("  the PRESETS knob steps through basses only (every engine), and round", ok && preset_pos(&total) == total - 1u);
     turn(EN_K4, 20);
     bad += check("  .. right to OTHER and no further (no wrap)", list_mode() == LIST_N - 1u && str_eq(list_name(list_mode()), "OTHER"));
-#if !FELUCCA_FM4                                           /* (DIGITAL's presets: OTHER's) */
+#if !FELUCCA_FM4 && SMP_BUILTINS                            /* (DIGITAL's presets: OTHER's; a build without
+                                                             * sets: SAMPLE's NONE placeholder is OTHER's) */
     {
         track_t before = *TSEL;
         ui.msg_t = 0;
@@ -3022,7 +3025,9 @@ static int test_product_ux(void)
         ok &= changed;
     }
     bad += check("all palettes: active column is subtle, stable-size, no zoom over graph", ok);
-    ui_power_on(); set_engine_of(TSEL, 4); open_family(FAM_EDIT);
+    ui_power_on();
+#if SMP_BUILTINS                          /* the waveform needs a zone of real data (none when FELUCCA_CC0=0) */
+    set_engine_of(TSEL, 4); open_family(FAM_EDIT);
     memset(&sample_wave, 0, sizeof sample_wave); last_note = 60;
     voice_t voices[NVOICE]; memcpy(voices, TSEL->v, sizeof voices);
     ok = 1;
@@ -3040,6 +3045,7 @@ static int test_product_ux(void)
     }
     ok &= !memcmp(lo, sample_wave.lo, sizeof lo) && !memcmp(hi, sample_wave.hi, sizeof hi);
     bad += check("sample waveform is bounded, matches audio IMA decode and leaves voices intact", ok);
+#endif
     ui_power_on(); return bad;
 }
 
@@ -3671,6 +3677,7 @@ static int test_sample_alert(void)
     TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 2u);      /* USR3: said for it */
     frame();
     ok = msg_is(nf);
+#if SMP_BUILTINS
     TSEL->p[P_E0] = 0;                              /* PIANO: nothing; then USR3 again: said again */
     frames(1500);
     ok &= !ui.msg_t;
@@ -3678,6 +3685,9 @@ static int test_sample_alert(void)
     frame();
     ok &= msg_is(nf);
     bad += check("SAMPLE: another empty slot is said; back to it after a sample: said again", ok);
+#else                                               /* (FELUCCA_CC0=0: no set has data to go back to) */
+    bad += check("SAMPLE: another empty slot is said", ok);
+#endif
     frames(1500);
     set_engine_of(TSEL, 8u);                         /* GRAIN, SRC USR2 */
     TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 1u);
@@ -3690,10 +3700,15 @@ static int test_sample_alert(void)
     frame();
     ok = msg_is(nf);
     frames(1500);
-    TSEL->p[P_E0] = 4;                               /* PIANO: there (the CC0 build) */
+    TSEL->p[P_E0] = 4;                               /* PIANO: there in a CC0 build */
     frame();
+#if SMP_BUILTINS
     ok &= !ui.msg_t && !snd_missing(TSEL, &i) == (SLC_PIANO.len != 0u);
     bad += check("SLICE on an empty USR3: said; PIANO: not (it has its sample)", ok);
+#else                                               /* FELUCCA_CC0=0: PIANO has no data either */
+    ok &= msg_is(nf);
+    bad += check("SLICE on an empty USR3: said; PIANO too (no built-in sets)", ok);
+#endif
     frames(1500);
 #endif
     /* a project with an empty slot: said after LOADED */
@@ -3764,6 +3779,7 @@ static int test_slices(void)
     ok &= TSEL->p[P_E1] == p0 && msg_is("USR2 EMPTY");
     TSEL->p[P_E0] = 0;
     bad += check("SLICES on an empty USR2: NO SAMPLE, no slices; edits: \"USR2 EMPTY\"", ok);
+#if SMP_BUILTINS                                   /* SRC PIANO shares the PIANO set's zone: none without CC0 */
     TSEL->p[P_E0] = 4;                               /* SRC PIANO: its 16 slices shown, no edits */
     frame();
     turn(EN_K2, 1);
@@ -3771,6 +3787,7 @@ static int test_slices(void)
     TSEL->p[P_E0] = 0;
     frame();
     bad += check("SLICES on PIANO: its 16 slices shown; edits need USR1-3 (DIV unchanged)", ok);
+#endif
 
     host_slot_make(0);
     smp_user_scan(0);
@@ -4068,6 +4085,7 @@ static int test_quick_layers(void)
     ok = TSEL->eng_req == eng_step(0, 1);
     btn_up(B_EDIT); frame();
     bad += check("  KNOB 1: the next engine", ok);
+#if SMP_BUILTINS
     {                                                   /* #124: SAMPLE's alias (1 = PIANO) is not a stop on KNOB 2 */
         uint32_t tot, n, c0, c1, c2, seen = 0, alias = 0;
         set_engine_of(TSEL, ENGI_SAMPLE); go_home(); frame();
@@ -4098,6 +4116,7 @@ static int test_quick_layers(void)
         btn_up(B_EDIT); frame();
         bad += check("  #124 SAMPLE: KNOB 2 right PIANO, FLUTE, SAX (No. 1 2 3), both ways round the list, never the alias", ok);
     }
+#endif
     song.playing = 0;
     lay_combo(B_EDIT, white(LY_INIT));
     ok = ui.confirm == CF_INIT_SOUND;

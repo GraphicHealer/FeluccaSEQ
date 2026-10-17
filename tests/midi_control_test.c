@@ -880,12 +880,14 @@ static int pc_test(void)
         ok &= !memcmp(was.p, t->p, sizeof was.p) && t->preset == was.preset && t->eng_req == e;
     }
     bad += check("  every engine: 0.. its presets in PRESETS' order (no alias twice); past the last ignored", ok);
+#if SMP_BUILTINS                     /* FeluccaSEQ (FELUCCA_CC0=0): no built-in sets, no FLUTE / PERC aliases */
     set_engine_of(t, ENGI_SAMPLE);
     pc(0, 1); frame();
     ok = str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "FLUTE");
     pc(0, 4); frame();
     ok &= t->eng_req == ENGI_SAMPLE && str_eq(ENGINES[ENGI_SAMPLE]->presets[t->preset].name, "FLUTE");
     bad += check("  SAMPLE: PC 1 is FLUTE (not PIANO's alias); PC 4 (once PERC) does not turn the track into DRUM", ok);
+#endif
 
     /* DRUM: the kits as KIT steps through them */
     {

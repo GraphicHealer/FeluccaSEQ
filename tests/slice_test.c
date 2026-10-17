@@ -859,8 +859,13 @@ int main(int argc, char **argv)
     sine_ok("SLICE on an empty USR2: A3", sine_run(SLC_ENG, 2, 57), 220.0);
     sine_ok("SAMPLE on an empty USR2: A4", sine_run(4u, (int16_t)(SMP_NSETS + 1), 69), 440.0);
     sine_ok("GRAIN on an empty USR3: C5", sine_run(8u, (int16_t)(SMP_NSETS + 2), 72), 523.25);
+#ifdef SLC_PIANO_NOTE
     check("SLICE on USR1 (a sample), SAMPLE on PIANO: not the sine", !sine_run(SLC_ENG, 1, 60).sine &&
           !sine_run(4u, 0, 60).sine, 0);
+#else
+    check("SLICE on USR1 (a sample): not the sine (no built-in sets: FELUCCA_CC0=0)",
+          !sine_run(SLC_ENG, 1, 60).sine, 0);
+#endif
     printf("slice: %s\n", fails ? "FAILED" : "all checks ok");
     return fails != 0;
 }

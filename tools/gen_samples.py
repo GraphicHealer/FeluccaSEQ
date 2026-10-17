@@ -351,6 +351,7 @@ class Builder:
             L.append('    {"NONE", 0, 1},')
         L.append("};")
         L.append(f"#define SMP_NSETS {max(1, len(sets))}")
+        L.append(f"#define SMP_BUILTINS {1 if sets else 0}   /* built-in (CC0) sets in SMP_DATA: 0 = user slots only */")
         named = sets or [("NONE", 0, 0)]
         perc = PERC_SLOT if len(named) > PERC_SLOT else len(named)
         L.append(f"#define SMP_NPRESETS {perc}")
@@ -436,9 +437,11 @@ def input_key(have_cc0):
 
 def main(out):
     subprocess.run([sys.executable, str(Path(__file__).with_name("gen_waves.py")), str(GENDIR)], check=True)
-    have_cc0 = CC0.exists() and any(CC0.glob("*/*.wav"))
+    # FeluccaSEQ: the bundled CC0 sets are cut (SAMPLE keeps USR1-3, SLICE keeps BREAK + USR, its PIANO
+    # shares a set that is gone, so it plays a sine). FELUCCA_CC0=1 builds them back in.
+    have_cc0 = os.environ.get("FELUCCA_CC0", "0") == "1" and CC0.exists() and any(CC0.glob("*/*.wav"))
     if not have_cc0:
-        print("samples: CC0 library not fetched (tools/fetch_cc0.py) - no SAMPLE sets")
+        print("samples: no built-in sets (FELUCCA_CC0=1 builds the CC0 library: assets/samples-cc0)")
     key = input_key(have_cc0)
     try:
         ck, summary, text = CACHE.read_text().split("\n", 2)
