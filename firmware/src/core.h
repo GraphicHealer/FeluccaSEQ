@@ -14,7 +14,8 @@
 #define NSTEP 64
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
 #ifndef FELUCCA_SLICE
-#define FELUCCA_SLICE 1          /* the SLICE engine (eng_slice.c), engine 13; FELUCCA_SLICE=0 builds without it */
+#define FELUCCA_SLICE 0          /* the SLICE engine (eng_slice.c): cut in FeluccaSEQ, its index 13 reserved; kept in
+                                  * the tree, FELUCCA_SLICE=1 builds it (its sounds then load, else they play silent) */
 #endif
 #ifndef FELUCCA_FM4
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built
