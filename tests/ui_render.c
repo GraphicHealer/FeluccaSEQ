@@ -1217,9 +1217,10 @@ static void setup(int s)
     case S_OP_ENV: eng(1); go_title("OP1 ENV"); break;
     case S_EDIT_WHEEL: eng(7); go_title("EDIT 1"); ui.hot_col = 1; ui.hot_t = 30; break;
     case S_EDIT_SAMPLE: {
-        uint32_t i;
         eng(4); go_title("EDIT 1"); last_note = 60;
-        for (i = 0; i < 4000u && !sample_wave.ready; i++) sample_wave_tick(TSEL);
+#if FELUCCA_SAMPLE
+        for (uint32_t i = 0; i < 4000u && !sample_wave.ready; i++) sample_wave_tick(TSEL);
+#endif
         break;
     }
     case S_EDIT_GRAIN: eng(8); go_title("EDIT 2"); break;

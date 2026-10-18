@@ -1,7 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* SAMPLE: IMA ADPCM sample sets. */
+/* SAMPLE: IMA ADPCM sample sets.
+ *
+ * FELUCCA_SAMPLE=0 (the FeluccaSEQ default) builds without the DSP: index 4 stays reserved (ENG_SAMPLE_GONE,
+ * never selectable, silent); a stored SAMPLE track keeps engine 4 and comes back whole with FELUCCA_SAMPLE=1.
+ * The user-slot layer below (upload, scan, backup: editor.c, project.c) is built either way — the stored slots
+ * outlive any one engine build — while the decode helpers it shares with GRAIN / SLICE follow their flags. */
+#if FELUCCA_SAMPLE
 static const char *const N_ONOFF_E[] = {"OFF", "ON"};
+#endif
 /* IMA ADPCM sample sets (tools/gen_samples.py), native rates, zones across
  * the keyboard, loops with the ADPCM state stored at the loop start.
  * SET is P_E0 (EDIT 1, KNOB 1). SET 4 was PERC, the GM drum kit: retired, an alias of PIANO; its sounds
@@ -22,6 +29,8 @@ typedef struct {
 #error "tools/gen_samples.py PERC_SLOT != core.h SMP_SET_PERC"
 #endif
 
+#if FELUCCA_SAMPLE || FELUCCA_GRAIN || FELUCCA_SLICE   /* ADPCM decode: SAMPLE voices, GRAIN grains, SLICE's src, the
+                                                        * SAMPLE wave display (ui_graph.c) */
 static const int16_t IMA_STEP[89] = {
     7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97,
     107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796,
@@ -36,6 +45,7 @@ static uint32_t pow2_q16(int32_t d16)
     uint32_t r = pitch_inc(1600 + u % 192u) / (pitch_inc(1600) >> 16);   /* 2^(d/192) via the pitch table */
     return oct >= 16u ? r << (oct - 16u) : r >> (16u - oct);
 }
+#endif
 
 /* ---- user sample slots (loaded from the web editor into flash, see web/EDITOR_PROTOCOL.md)
  * 3 slots of 80 KiB at flash 0xA0000.. (Felucca data region), read through the plain XIP
@@ -59,6 +69,7 @@ typedef struct {
 static smp_zone_t usr_zone[SMP_USER_SLOTS][16];     /* RAM copy, off rebased onto SMP_DATA */
 static uint8_t usr_nz[SMP_USER_SLOTS];
 static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3"};
+                                                /* (params.c: a SET / SRC edit desc's names are these) */
 
 #ifndef SMP_USER_XIP                                /* host tests: a RAM image of the slots */
 #define SMP_USER_XIP(k) fm1_xip_ptr(SMP_USER_BASE + (k) * SMP_USER_SIZE)
@@ -109,6 +120,7 @@ static void smp_user_scan(uint32_t k)
  * semitones), at half the peak of a full sample, through the engine's one-pole low-pass (lp Q15, state *y) and the
  * voice's amp (the ADSR: no click at the start, phase 0, or the end). *ph its phase. The UI says so once
  * (engines.c snd_missing, ui_input.c sample_notice). */
+#if FELUCCA_SAMPLE || FELUCCA_GRAIN || FELUCCA_SLICE
 static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int32_t lp, uint32_t *ph, int32_t *y)
 {
     uint32_t i, p = *ph, inc = pitch_inc((uint32_t)clamp(m->pitch16 + d16, 0, 2047));
@@ -120,6 +132,8 @@ static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int
     *ph = p;
     *y = s;
 }
+#endif
+#if FELUCCA_SAMPLE || FELUCCA_GRAIN
 /* SET / SRC si (0..SMP_NALL - 1) has no sample data: an empty or invalid user slot, a built-in set without data */
 static int smp_set_missing(uint32_t si)
 {
@@ -127,7 +141,9 @@ static int smp_set_missing(uint32_t si)
         return !SMP_ZONES[SMP_SETS[si].z0].n;
     return !usr_nz[(si - SMP_NSETS) % SMP_USER_SLOTS];
 }
+#endif
 
+#if FELUCCA_SAMPLE
 /* zone index in a voice: < 0x8000 built-in, else 0x8000 | slot << 5 | zone */
 static inline const smp_zone_t *smp_zone(uint32_t zi)
 {
@@ -261,3 +277,24 @@ static const engine_t ENG_SAMPLE = {
     .knob = {P_E0, P_E4, P_ATK, P_REL},
     .sampled = 1,
 };
+#else
+/* engine 4 without the DSP (as engine 1's ENG_FM4_GONE, 9's ENG_PHYS_GONE): never selectable, no presets, silent;
+ * a stored SAMPLE track keeps engine 4 (its sounds come back whole with FELUCCA_SAMPLE=1) */
+static void sample_gone_note_on(struct track *t, voice_t *v) { (void)t; (void)v; }
+static void sample_gone_render(struct track *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    (void)t; (void)v; (void)out; (void)n; (void)m;
+}
+static const engine_t ENG_SAMPLE_GONE = {
+    .name = "-",
+    .page_title = {"-", "-"},
+    .edit = {
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+    },
+    .note_on = sample_gone_note_on,
+    .render = sample_gone_render,
+    .knob = {P_E0, P_E4, P_ATK, P_REL},
+};
+#endif

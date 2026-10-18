@@ -40,6 +40,8 @@ OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_
             "slice_render": 453, "slc_rev": 120,   # (FELUCCA_SLICE=1 only: cut in FeluccaSEQ's default build)
             "phys_render": 61,          # (FELUCCA_PHYS=1 only: cut in FeluccaSEQ's default build)
             "formant_render": 312,      # (FELUCCA_VOICE=1 only: cut in FeluccaSEQ's default build)
+            "sample_render": 1097, "grain_render": 1288, "grain_block": 108,   # (FELUCCA_SAMPLE / FELUCCA_GRAIN=1
+                                                    # only: cut in FeluccaSEQ's default build)
             "px_modal_block": 111, "px_modal_run": 192, "px_memb_block": 106,
             "px_string_excite": 171, "px_string_run": 264, "px_symp_run": 252}
 # a FELUCCA_CPU2=0 build (no mix_part: inlined into the audio ISR, as 1.6) has the one-core ISR, checked against this

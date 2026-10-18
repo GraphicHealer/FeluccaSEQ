@@ -5,13 +5,10 @@ analog_render 614
 phase_render 77
 phase_render_f 107
 lofi_render 123
-sample_render 1097
 trio_render 341
 trio_pass 175
 wheel_render 267
 wheel_block 86
-grain_render 1288
-grain_block 108
 drum_render 89
 noise_render 259
 fm6_render 364
@@ -29,8 +26,8 @@ dv_cym_run 67
 dv_out 35
 dv_metal_mix 16
 slicer_track 556
-fm1_alnk0_irq 8268
-fm1_timer5_irq 34573
+fm1_alnk0_irq 8229
+fm1_timer5_irq 34557
 click_render 30
 mod_begin 167
 mod_voice 30

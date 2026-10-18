@@ -37,7 +37,11 @@
  * PHASE WIRE 1510, TRIO CHIP CHOIR 1455, WHEEL FULL ORGAN 1413 (8 keys, no sends). State: per part the grain pool, the reverse windows and the index
  * (gr_part_t, in the part's engine memory: engines.c eng_mem), the random numbers outside it (gr_rng: they run on
  * over notes and engine switches); per voice s[0] the zone, s[1] the countdown to the next grain,
- * s[2] the low-pass, voice_t's phases are unused. */
+ * s[2] the low-pass, voice_t's phases are unused.
+ *
+ * FELUCCA_GRAIN=0 (the FeluccaSEQ default) builds without the DSP: index 8 stays reserved (ENG_GRAIN_GONE,
+ * never selectable, silent); a stored GRAIN track keeps engine 8 and comes back whole with FELUCCA_GRAIN=1. */
+#if FELUCCA_GRAIN
 #define GR_POLY 3                /* voices per part */
 #define GR_NG 12                 /* grains per part */
 #define GR_SEG_LOG2 8
@@ -462,3 +466,24 @@ static const engine_t ENG_GRAIN = {
     .block = grain_block,
     .mem = sizeof(gr_part_t),
 };
+#else
+/* engine 8 without the DSP (as engine 1's ENG_FM4_GONE, 9's ENG_PHYS_GONE): never selectable, no presets, silent;
+ * a stored GRAIN track keeps engine 8 (its sounds come back whole with FELUCCA_GRAIN=1) */
+static void grain_gone_note_on(struct track *t, voice_t *v) { (void)t; (void)v; }
+static void grain_gone_render(struct track *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    (void)t; (void)v; (void)out; (void)n; (void)m;
+}
+static const engine_t ENG_GRAIN_GONE = {
+    .name = "-",
+    .page_title = {"-", "-"},
+    .edit = {
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+    },
+    .note_on = grain_gone_note_on,
+    .render = grain_gone_render,
+    .knob = {P_E1, P_E2, P_E3, P_E5},
+};
+#endif

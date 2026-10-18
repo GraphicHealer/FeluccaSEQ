@@ -219,14 +219,23 @@ static const uint8_t MIDI_CC_MAP[][2] = {
 };
 /* per engine (ENGINES[] order): CC74's E index + 1 in the high nibble, CC71's in the low one, 0 = none */
 static const uint8_t MIDI_CC_ENG[NENGINES] = {
-    0x56, 0x00, 0x30, 0x80, 0x50,                    /* ANALOG CUT RES, -, PHASE DCW, LOFI TONE, SAMPLE CUT */
+    0x56, 0x00, 0x30, 0x80,                          /* ANALOG CUT RES, -, PHASE DCW, LOFI TONE */
+#if FELUCCA_SAMPLE
+    0x50,                                            /* SAMPLE CUT */
+#else
+    0x00,                                            /* 4: reserved (FELUCCA_SAMPLE=0) */
+#endif
 #if FELUCCA_VOICE
     0x07,                                            /* VOICE Q */
 #else
     0x00,                                            /* 5: reserved (FELUCCA_VOICE=0) */
 #endif
     0x67, 0x00,                                      /* TRIO CUT RES, WHEEL - */
+#if FELUCCA_GRAIN
     0x80,                                            /* GRAIN TONE */
+#else
+    0x00,                                            /* 8: reserved (FELUCCA_GRAIN=0) */
+#endif
 #if FELUCCA_PHYS
     0x30,                                            /* PHYS BRIT */
 #else

@@ -3651,9 +3651,16 @@ static int test_edit_cycle(void)
 /* a missing sample (an empty user slot; a set this build lacks): it plays a sine (eng_sample.c smp_sine) and the UI
  * says NO SAMPLE, led by the no-file icon (ui.c MSG_NO_SAMPLE), once per track and source (ui_input.c
  * sample_notice): when it is chosen, not on its notes; again for another source; after a project load (behind
- * LOADED); the icon and the words fit the header */
+ * LOADED); the icon and the words fit the header. (FeluccaSEQ's default build has none of the three engines:
+ * only the icon check below runs; the alert itself needs SAMPLE, GRAIN or SLICE.) */
 static int test_sample_alert(void)
 {
+#if !(FELUCCA_SAMPLE || FELUCCA_GRAIN || FELUCCA_SLICE)
+    const char *nf = MSG_NO_SAMPLE;
+    char b[48];
+    return check("missing sample: the icon and NO SAMPLE fit the header",
+                 nf[0] == MSG_NOFILE[0] && !text_fit(b, sizeof b, nf + 1, &AF_S, 236 - 106 - 16 - KH_GAP));
+#else
     const char *nf = MSG_NO_SAMPLE;
     int bad = 0, ok, seen;
     uint32_t i;
@@ -3663,6 +3670,7 @@ static int test_sample_alert(void)
     bad += check("missing sample: the power-on sounds have their samples (no alert)", !snd_missing(&trk[0], &i) &&
                  !snd_missing(&trk[1], &i) && !snd_missing(&trk[2], &i) && !snd_missing(&trk[3], &i) &&
                  !str_eq(ui.msg, nf));
+#if FELUCCA_SAMPLE
     set_engine_of(TSEL, ENGI_SAMPLE);
     TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 1u);      /* SET USR2: empty */
     frame();
@@ -3689,11 +3697,14 @@ static int test_sample_alert(void)
     bad += check("SAMPLE: another empty slot is said", ok);
 #endif
     frames(1500);
+#endif
+#if FELUCCA_GRAIN
     set_engine_of(TSEL, 8u);                         /* GRAIN, SRC USR2 */
     TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 1u);
     frame();
     bad += check("GRAIN on an empty USR2: said", msg_is(nf));
     frames(1500);
+#endif
 #if FELUCCA_SLICE
     set_engine_of(TSEL, 13u);                        /* SLICE, SRC USR3 */
     TSEL->p[P_E0] = 3;
@@ -3712,8 +3723,16 @@ static int test_sample_alert(void)
     frames(1500);
 #endif
     /* a project with an empty slot: said after LOADED */
+#if FELUCCA_SAMPLE
     set_engine_of(TSEL, ENGI_SAMPLE);
-    TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 1u);
+    TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 1u);      /* USR2 */
+#elif FELUCCA_GRAIN                                 /* (no SAMPLE: GRAIN or SLICE — this branch needs one) */
+    set_engine_of(TSEL, 8u);
+    TSEL->p[P_E0] = (int16_t)(SMP_NSETS + 1u);      /* SRC USR2 */
+#else
+    set_engine_of(TSEL, 13u);
+    TSEL->p[P_E0] = 2;                              /* SRC USR2 (SLICE's order: BREAK USR1 USR2 USR3 PIANO) */
+#endif
     frames(1500);
     project_save(2);
     frames(1500);
@@ -3729,6 +3748,7 @@ static int test_sample_alert(void)
                  nf[0] == MSG_NOFILE[0] && !text_fit(b, sizeof b, nf + 1, &AF_S, 236 - 106 - 16 - KH_GAP));
     ui_power_on();
     return bad;
+#endif
 }
 
 #if FELUCCA_SLICE
@@ -5045,7 +5065,8 @@ static int test_fm4_retired(void)
     int bad = 0, ok = 1;
     uint32_t i, k, e, total, seen = 0,
              all = ((1u << NENGINES) - 1u) & ~(1u << ENGI_DIGITAL) & ~(FELUCCA_PHYS ? 0u : (1u << ENGI_PHYS)) &
-                   ~(FELUCCA_VOICE ? 0u : (1u << ENGI_VOICE));
+                   ~(FELUCCA_VOICE ? 0u : (1u << ENGI_VOICE)) & ~(FELUCCA_SAMPLE ? 0u : (1u << ENGI_SAMPLE)) &
+                   ~(FELUCCA_GRAIN ? 0u : (1u << ENGI_GRAIN));
     int16_t p[P_COUNT];
     uint8_t v[FP_SIZE + 1u];
     ui_power_on();
@@ -5057,8 +5078,9 @@ static int test_fm4_retired(void)
         if (e < NENGINES)
             seen |= 1u << e;
     }
-    bad += check("PRESETS: the list holds every engine's presets but DIGITAL's (and PHYS's when cut)",
-                 seen == all && NENG_SHOWN == NENGINES - 1u - !FELUCCA_PHYS - !FELUCCA_VOICE);
+    bad += check("PRESETS: the list holds every engine's presets but DIGITAL's (and the cut engines')",
+                 seen == all && NENG_SHOWN == NENGINES - 1u - !FELUCCA_PHYS - !FELUCCA_VOICE - !FELUCCA_SAMPLE -
+                                        !FELUCCA_GRAIN);
     go_page(GR_BROWSE);
     set_engine_of(TSEL, 0);
     for (i = 0, seen = 0; i < NENG_SHOWN; i++) {
@@ -5069,11 +5091,17 @@ static int test_fm4_retired(void)
                  seen == all && TSEL->eng_req == 0u && eng_step(0, 1) == ENGI_FM6 && eng_step(ENGI_FM6, 1) == 2u &&
                  eng_step(ENGI_FM6, -1) == 0u && eng_step(0, -1) == ENGI_DRUM);
     {   /* the display order (engines.c ENGINE_ORDER): every engine one can pick once; the PRESETS list follows it */
-        static const char *const ORDER[] = {"ANALOG", "FM6", "PHASE", "LOFI", "SAMPLE",
+        static const char *const ORDER[] = {"ANALOG", "FM6", "PHASE", "LOFI",
+#if FELUCCA_SAMPLE
+                                            "SAMPLE",
+#endif
 #if FELUCCA_VOICE
                                             "VOICE",
 #endif
-                                            "TRIO", "WHEEL", "GRAIN",
+                                            "TRIO", "WHEEL",
+#if FELUCCA_GRAIN
+                                            "GRAIN",
+#endif
 #if FELUCCA_PHYS
                                             "PHYS",
 #endif

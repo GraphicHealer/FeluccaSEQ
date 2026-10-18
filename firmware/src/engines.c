@@ -13,7 +13,7 @@
  * Sized by the largest built engine: PHYS (3 x SYMP's slot), else GRAIN's gr_part_t; an engine that needs
  * more than ENG_MEM_PART grows it for every part (x NPART of the pool). Zero-initialised pool section:
  * main.c fm1_cstart clears it. */
-#define ENG_MEM_PART (FELUCCA_PHYS ? 12888u : 7112u)
+#define ENG_MEM_PART (FELUCCA_PHYS ? 12888u : FELUCCA_GRAIN ? 7112u : 1824u)   /* GRAIN's gr_part_t, else DRUM's lanes */
 static union {
     uint64_t align;
     uint8_t b[ENG_MEM_PART];
@@ -52,7 +52,11 @@ static const engine_t *const ENGINES[NENGINES] = {
 #endif
     &ENG_PHASE,                  /* 2 */
     &ENG_LOFI,                   /* 3 */
+#if FELUCCA_SAMPLE
     &ENG_SAMPLE,                 /* 4 */
+#else
+    &ENG_SAMPLE_GONE,            /* 4: reserved (SAMPLE, cut in FeluccaSEQ: its sounds keep the index, play silent) */
+#endif
 #if FELUCCA_VOICE
     &ENG_FORMANT,                /* 5 VOICE (eng_formant.c: "voice" is a sounding note in voice.c) */
 #else
@@ -60,7 +64,11 @@ static const engine_t *const ENGINES[NENGINES] = {
 #endif
     &ENG_TRIO,                   /* 6 */
     &ENG_WHEEL,                  /* 7 */
+#if FELUCCA_GRAIN
     &ENG_GRAIN,                  /* 8 */
+#else
+    &ENG_GRAIN_GONE,             /* 8: reserved (GRAIN, cut in FeluccaSEQ: its sounds keep the index, play silent) */
+#endif
 #if FELUCCA_PHYS
     &ENG_PHYS,                   /* 9 (ENGI_PHYS) */
 #else
@@ -102,6 +110,10 @@ static void eng_mem_claim(const track_t *t)
 static uint8_t snd_said[NTRK];   /* per track: the code last said, 0 = none (a project load clears them: said again) */
 static const char *snd_missing(const track_t *t, uint32_t *code)
 {
+#if !FELUCCA_SAMPLE && !FELUCCA_GRAIN && !FELUCCA_SLICE
+    (void)t; (void)code;
+    return 0;                        /* no sample-based engine built: nothing can be missing */
+#else
     const engine_t *e = ENGINES[eng_idx(t->eng_req)];
     uint32_t si = (uint32_t)t->p[P_E0] % SMP_NALL;
 #if FELUCCA_SLICE
@@ -111,10 +123,20 @@ static const char *snd_missing(const track_t *t, uint32_t *code)
         return slc_get(si) ? 0 : N_SLC_SRC[si];
     }
 #endif
-    if (e != &ENG_SAMPLE && e != &ENG_GRAIN)
-        return 0;
-    *code = (e == &ENG_GRAIN ? 32u : 1u) + si % 32u;
-    return smp_set_missing(si) ? SMP_ALL_NAMES[si] : 0;
+#if FELUCCA_SAMPLE
+    if (e == &ENG_SAMPLE) {
+        *code = 1u + si % 32u;
+        return smp_set_missing(si) ? SMP_ALL_NAMES[si] : 0;
+    }
+#endif
+#if FELUCCA_GRAIN
+    if (e == &ENG_GRAIN) {
+        *code = 32u + si % 32u;
+        return smp_set_missing(si) ? SMP_ALL_NAMES[si] : 0;
+    }
+#endif
+    return 0;
+#endif
 }
 
 /* the order the engines are shown in (PRESETS browsing and its ENG knob, the EDIT layer's keys, the editor's list):
@@ -126,11 +148,17 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
 #if FELUCCA_FM4
     1,                           /* DIGITAL */
 #endif
-    2, 3, 4,                     /* PHASE LOFI SAMPLE */
+    2, 3,                        /* PHASE LOFI */
+#if FELUCCA_SAMPLE
+    4,                           /* SAMPLE */
+#endif
 #if FELUCCA_VOICE
     5,                           /* VOICE */
 #endif
-    6, 7, 8,                     /* TRIO WHEEL GRAIN */
+    6, 7,                        /* TRIO WHEEL */
+#if FELUCCA_GRAIN
+    8,                           /* GRAIN */
+#endif
 #if FELUCCA_PHYS
     9,                           /* PHYS */
 #endif
@@ -146,7 +174,8 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
 static int eng_ok(uint32_t e)
 {
     return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL) && (FELUCCA_PHYS || e != ENGI_PHYS) &&
-           (FELUCCA_VOICE || e != ENGI_VOICE);
+           (FELUCCA_VOICE || e != ENGI_VOICE) && (FELUCCA_SAMPLE || e != ENGI_SAMPLE) &&
+           (FELUCCA_GRAIN || e != ENGI_GRAIN);
 }
 static uint32_t eng_vis(uint32_t n) { return ENGINE_ORDER[n % NENG_SHOWN]; }
 static uint32_t eng_rank(uint32_t e)

@@ -557,6 +557,7 @@ static uint32_t str_hash(uint32_t h, const char *s)
  * private IMA state, 512 samples per frame; no audio voice state is touched.
  * Cache follows the sample zone, selected note and user-slot generation. */
 #define SAMPLE_WAVE_COLS 96u
+#if FELUCCA_SAMPLE
 static struct {
     int16_t lo[SAMPLE_WAVE_COLS], hi[SAMPLE_WAVE_COLS];
     const smp_zone_t *zone;
@@ -628,6 +629,7 @@ static void graph_sample(uint16_t c)
         cv_line(left, 4, left, 90, T_MID); cv_line(right, 4, right, 90, T_MID);
     }
 }
+#endif
 
 #if FELUCCA_SLICE
 /* SLICES (ui_slice.c): the waveform from the marker before the selected one to the one after it (the selected
@@ -1238,7 +1240,9 @@ static uint32_t graph_signature(void)
     if ((pg->scope == SC_ENGINE || fop_page(pg->graph)) && t->eng_req % NENGINES == ENGI_FM6)   /* the patch (PAT's algorithm,
                                                      * levels, FB; the operator pages: the operator, the stage) */
         h ^= (fm6_pgen[(t - trk) % NTRK] + 1u) * 2246822519u + (fop_op + 1u) * 40503u + (fop_stg + 1u) * 7919u;
+#if FELUCCA_SAMPLE
     if (pg->scope == SC_ENGINE && ENGINES[t->eng_req % NENGINES] == &ENG_SAMPLE) h ^= sample_wave.pos * 13u + sample_wave.key;
+#endif
     if (pg->graph == GR_ROLL) {
         uint32_t ph = song.playing ? t->seq_idx : 0xFFFFu;
         if (ph / 16u != ui.bank)
@@ -2243,7 +2247,9 @@ static void draw_graph(void)
         draw_home_tracks();
         return;
     }
+#if FELUCCA_SAMPLE
     if (!ui.home && pg->scope == SC_ENGINE && ENGINES[t->eng_req % NENGINES] == &ENG_SAMPLE) sample_wave_tick(t);
+#endif
     sig = graph_signature();
     if (!ui.force && sig == ui.graph_sig)
         return;
@@ -2344,7 +2350,9 @@ static void draw_graph(void)
             break;
         default:
             if (pg->scope == SC_ENGINE && ENGINES[t->eng_req % NENGINES] == &ENG_WHEEL) graph_wheel(t, c);
+#if FELUCCA_SAMPLE
             else if (pg->scope == SC_ENGINE && ENGINES[t->eng_req % NENGINES] == &ENG_SAMPLE && sample_wave.ready) graph_sample(c);
+#endif
             else if (pg->scope == SC_ENGINE && t->eng_req % NENGINES == ENGI_FM6) graph_fm6(t, c, 6u);   /* EDIT 1 and 2 */
 #if FELUCCA_FM4
             else if ((pg->scope == SC_ENGINE || pg->id[0] == P_FM1_LEVEL) && t->eng_req % NENGINES == ENGI_DIGITAL)

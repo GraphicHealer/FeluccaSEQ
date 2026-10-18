@@ -150,14 +150,18 @@ int main(void)
     sc[n++] = (scen_t){"TRIO WHEEL PHASE FM6", {6, 7, 2, ENGI_FM6}, {1, 4, 7, 10}, 0};
 #if FELUCCA_PHYS
     sc[n++] = (scen_t){"PHYS morph + DRUM GRAIN ANALOG", {ENGI_PHYS, ENGI_DRUM, 8, 0}, {2, 1, 3, 5}, 1};
-#else
+#elif FELUCCA_GRAIN
     sc[n++] = (scen_t){"WHEEL morph + DRUM GRAIN ANALOG", {7, ENGI_DRUM, 8, 0}, {2, 1, 3, 5}, 1};
+#else
+    sc[n++] = (scen_t){"WHEEL morph + DRUM TRIO ANALOG", {7, ENGI_DRUM, 6, 0}, {2, 1, 3, 5}, 1};
 #endif
 #if FELUCCA_SLICE
     sc[n++] = (scen_t){"SAMPLE SLICE GRAIN PHASE", {ENGI_SAMPLE, 13, 8, 2}, {2, 1, 3, 5}, 0};
     sc[n++] = (scen_t){"SLICE FM6 SAMPLE DRUM", {13, ENGI_FM6, ENGI_SAMPLE, ENGI_DRUM}, {0, 2, 3, 4}, 0};
-#else
+#elif FELUCCA_SAMPLE && FELUCCA_GRAIN
     sc[n++] = (scen_t){"SAMPLE FM6 GRAIN PHASE", {ENGI_SAMPLE, ENGI_FM6, 8, 2}, {2, 1, 3, 5}, 0};
+#else
+    sc[n++] = (scen_t){"LOFI FM6 TRIO PHASE", {3, ENGI_FM6, 6, 2}, {2, 1, 3, 5}, 0};
 #endif
     for (i = 0; i < n; i++) {
         uint64_t ref;
