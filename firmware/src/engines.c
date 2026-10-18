@@ -10,9 +10,10 @@
  * last claimed it (eng_mem_owner); a switch to another such engine zeroes its engine_t.mem bytes, which is
  * the state each had at power-on, so a switch sounds as it did with the arrays (tests/union_test.c). State
  * that runs on across notes and switches stays outside (WHEEL's wheels, GRAIN's random numbers).
- * Sized by the largest, PHYS (3 x SYMP's slot); an engine that needs more than ENG_MEM_PART grows it for
- * every part (x NPART of the pool). Zero-initialised pool section: main.c fm1_cstart clears it. */
-#define ENG_MEM_PART 12888u
+ * Sized by the largest built engine: PHYS (3 x SYMP's slot), else GRAIN's gr_part_t; an engine that needs
+ * more than ENG_MEM_PART grows it for every part (x NPART of the pool). Zero-initialised pool section:
+ * main.c fm1_cstart clears it. */
+#define ENG_MEM_PART (FELUCCA_PHYS ? 12888u : 7112u)
 static union {
     uint64_t align;
     uint8_t b[ENG_MEM_PART];
@@ -56,7 +57,11 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_TRIO,                   /* 6 */
     &ENG_WHEEL,                  /* 7 */
     &ENG_GRAIN,                  /* 8 */
+#if FELUCCA_PHYS
     &ENG_PHYS,                   /* 9 (ENGI_PHYS) */
+#else
+    &ENG_PHYS_GONE,              /* 9: reserved (PHYS, cut in FeluccaSEQ: its sounds keep the index, play silent) */
+#endif
     &ENG_DRUM,                   /* 10 (ENGI_DRUM) */
     &ENG_NOISE,                  /* 11 */
     &ENG_FM6,                    /* 12 (ENGI_FM6) */
@@ -117,7 +122,10 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
 #if FELUCCA_FM4
     1,                           /* DIGITAL */
 #endif
-    2, 3, 4, 5, 6, 7, 8, 9,      /* PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN PHYS */
+    2, 3, 4, 5, 6, 7, 8,         /* PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN */
+#if FELUCCA_PHYS
+    9,                           /* PHYS */
+#endif
     11,                          /* NOISE */
 #if FELUCCA_SLICE
     13,                          /* SLICE */
@@ -127,7 +135,10 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
 
 /* the engines one can pick (engine 1 only with FELUCCA_FM4), in ENGINE_ORDER: eng_ok(e), the n-th of them
  * eng_vis(n), e's place among them eng_rank(e), the next / previous one eng_step(e, dir) (wraps) */
-static int eng_ok(uint32_t e) { return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL); }
+static int eng_ok(uint32_t e)
+{
+    return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL) && (FELUCCA_PHYS || e != ENGI_PHYS);
+}
 static uint32_t eng_vis(uint32_t n) { return ENGINE_ORDER[n % NENG_SHOWN]; }
 static uint32_t eng_rank(uint32_t e)
 {

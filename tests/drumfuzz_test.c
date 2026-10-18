@@ -281,7 +281,9 @@ int main(int argc, char **argv)
     for (s = s0; s < s0 + ns; s++) {
         uint32_t synth = s % NENGINES;
         if (synth == ENGI_DIGITAL) synth = ENGI_FM6;
+#if FELUCCA_PHYS
         if (synth == ENGI_DRUM) synth = ENGI_PHYS;
+#endif
         fz_seed = s;
         rs = s * 2654435761u + 1u;
         setup(synth);

@@ -37,7 +37,10 @@ FUNCS = ["analog_render", "digital_render", "digital_render_legacy", "digital_re
 OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_custom": 558,
             "uac_tap48": 504,           # (absent from a FELUCCA_UAC_48K=0 or FELUCCA_UAC=0 build)
             "mix_part": 2800,           # (FELUCCA_CPU2=1, the default since 1.6.1: out of line, either core may run it)
-            "slice_render": 453, "slc_rev": 120}   # (FELUCCA_SLICE=1 only: cut in FeluccaSEQ's default build)
+            "slice_render": 453, "slc_rev": 120,   # (FELUCCA_SLICE=1 only: cut in FeluccaSEQ's default build)
+            "phys_render": 61,          # (FELUCCA_PHYS=1 only: cut in FeluccaSEQ's default build)
+            "px_modal_block": 111, "px_modal_run": 192, "px_memb_block": 106,
+            "px_string_excite": 171, "px_string_run": 264, "px_symp_run": 252}
 # a FELUCCA_CPU2=0 build (no mix_part: inlined into the audio ISR, as 1.6) has the one-core ISR, checked against this
 ONE_CORE = {"fm1_alnk0_irq": 37502}
 TOL = 0.10                      # exact (no noise): small edits pass, a grown render loop does not

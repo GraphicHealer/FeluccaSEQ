@@ -406,18 +406,22 @@ if [ -f build/gen/felucca_tables.h ]; then
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/descdump" tests/descdump.c -lm
     echo "== parameter and engine tables as JSON (for the editor mock test)"
     "$OUT/descdump" > "$OUT/desc.json" || fail=1
-    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/phys_test" tests/phys_test.c -lm
-    mkdir -p build/phys_demo
-    run "PHYS: stability C-1..G9 over the parameter corners, worst-case cost against PHASE WIRE, demos" "$OUT/phys_test" build/phys_demo
+    if [ "${FELUCCA_PHYS:-0}" = "1" ]; then
+        $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/phys_test" tests/phys_test.c -lm
+        mkdir -p build/phys_demo
+        run "PHYS: stability C-1..G9 over the parameter corners, worst-case cost against PHASE WIRE, demos" "$OUT/phys_test" build/phys_demo
+    else
+        echo "== skip PHYS (FELUCCA_PHYS=0, the FeluccaSEQ default)"
+    fi
     D=${DAISYSP:-vendor/DaisySP}/Source
-    if [ -d "$D/PhysicalModeling" ] && command -v c++ >/dev/null 2>&1; then
+    if [ "${FELUCCA_PHYS:-0}" = "1" ] && [ -d "$D/PhysicalModeling" ] && command -v c++ >/dev/null 2>&1; then
         $CC -O2 -w -Ibuild/gen -Ifirmware/src -Itests -c -o "$OUT/phys_fixed.o" tests/phys_fixed.c
         c++ -O2 -std=c++14 -w -I"$D" -I"$D/Utility" -o "$OUT/phys_ref" tests/phys_ref.cpp \
             "$D/PhysicalModeling/modalvoice.cpp" "$D/PhysicalModeling/resonator.cpp" "$D/PhysicalModeling/stringvoice.cpp" \
             "$D/PhysicalModeling/KarplusString.cpp" "$D/Filters/svf.cpp" "$D/Utility/dcblock.cpp" \
             "$D/Dynamics/crossfade.cpp" "$OUT/phys_fixed.o"
         run "PHYS: the fixed-point models against DaisySP's float originals (mode frequencies, decays, Svf)" "$OUT/phys_ref"
-    else
+    elif [ "${FELUCCA_PHYS:-0}" = "1" ]; then
         echo "== skip PHYS reference test (no DaisySP: set DAISYSP to a checkout)"
     fi
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/drum_test" tests/drum_test.c -lm

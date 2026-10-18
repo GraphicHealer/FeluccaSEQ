@@ -37,11 +37,26 @@
  * memory (engines.c eng_mem; phys_slot_of: SYMP's, the largest: the string's 512 + 128 sample lines, Q20, and three
  * 256-sample sympathetic lines, 16-bit), 12 slots in all. Voice amplitude: the track's ADSR as for every
  * engine; the presets hold SUS at 127 so the model's own decay is heard and REL damps it after the key.
- * Cost (host, 8 notes asked = 3 voices): see the README and cpu_baseline.txt. */
+ * Cost (host, 8 notes asked = 3 voices): see the README and cpu_baseline.txt.
+ *
+ * FELUCCA_PHYS=0 (the FeluccaSEQ default) builds without the DSP: index 9 stays reserved (ENG_PHYS_GONE,
+ * never selectable, silent), phys_legacy still runs for the stored sounds. */
+
+enum { PM_MODAL, PM_STRING, PM_MEMB, PM_SYMP, PM_COUNT };
+
+/* a project or user preset saved before 1.0 (MODEL 2 was DUST): its E values as today's */
+static void phys_legacy(int16_t *e)
+{
+    if (e[0] == 2) {                                     /* DUST -> MODAL bowed (random hits into resonators) */
+        e[0] = PM_MODAL;
+        e[6] = 64;
+    }
+}
+
+#if FELUCCA_PHYS
 #include "phys_dsp.c"
 #include "phys_symp.c"
 
-enum { PM_MODAL, PM_STRING, PM_MEMB, PM_SYMP, PM_COUNT };
 #define PHYS_POLY 3
 /* output: model 1.0 -> this (VOICE_FS scale), then a soft knee; per model (a strike of all the modes in
  * phase peaks high but is short) */
@@ -82,15 +97,6 @@ static const int16_t PHYS_CHORDS[7][PX_NSYMP] = {
     {300, 700, 1200}, {200, 700, 1400}, {400, 700, 1000},
 };
 static const int8_t PHYS_DETUNE[PX_NSYMP] = {1, -1, 0};   /* 1/16 semitone (6 cents): the strings beat a little */
-
-/* a project or user preset saved before 1.0 (MODEL 2 was DUST): its E values as today's */
-static void phys_legacy(int16_t *e)
-{
-    if (e[0] == 2) {                                     /* DUST -> MODAL bowed (random hits into resonators) */
-        e[0] = PM_MODAL;
-        e[6] = 64;
-    }
-}
 
 static phys_slot_t *phys_slot_of(track_t *t, voice_t *v)
 {
@@ -257,3 +263,24 @@ static const engine_t ENG_PHYS = {
     .desc = phys_desc,
     .mem = sizeof(phys_slot_t) * PHYS_POLY,
 };
+#else
+/* engine 9 without the DSP (as engine 1's ENG_FM4_GONE): never selectable, no presets, silent; a stored
+ * PHYS track keeps engine 9 (its sounds come back whole with FELUCCA_PHYS=1) */
+static void phys_gone_note_on(struct track *t, voice_t *v) { (void)t; (void)v; }
+static void phys_gone_render(struct track *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    (void)t; (void)v; (void)out; (void)n; (void)m;
+}
+static const engine_t ENG_PHYS_GONE = {
+    .name = "-",
+    .page_title = {"-", "-"},
+    .edit = {
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+    },
+    .note_on = phys_gone_note_on,
+    .render = phys_gone_render,
+    .knob = {P_E1, P_E2, P_E3, P_E4},
+};
+#endif

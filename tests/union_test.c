@@ -55,7 +55,11 @@ static void uplay(track_t *t, uint32_t e, uint32_t pi, uint32_t base, uint32_t w
     urun(250);                                   /* still ringing at the next switch */
 }
 
-static const uint32_t UE[] = {0 /* ANALOG */, ENGI_SAMPLE, 7 /* WHEEL */, 8 /* GRAIN */, ENGI_PHYS, ENGI_DRUM, ENGI_FM6,
+static const uint32_t UE[] = {0 /* ANALOG */, ENGI_SAMPLE, 7 /* WHEEL */, 8 /* GRAIN */,
+#if FELUCCA_PHYS
+                              ENGI_PHYS,
+#endif
+                              ENGI_DRUM, ENGI_FM6,
 #if FELUCCA_SLICE
                               13 /* SLICE */
 #endif

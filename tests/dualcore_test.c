@@ -137,10 +137,18 @@ int main(void)
             sc[n++].morph = 0;
         }
     }
+#if FELUCCA_PHYS
     sc[n++] = (scen_t){"PHYS FM6 ANALOG DRUM", {ENGI_PHYS, ENGI_FM6, 0, ENGI_DRUM}, {1, 4, 7, 0}, 0};
+#else
+    sc[n++] = (scen_t){"GRAIN FM6 ANALOG DRUM", {8, ENGI_FM6, 0, ENGI_DRUM}, {1, 4, 7, 0}, 0};
+#endif
     sc[n++] = (scen_t){"GRAIN NOISE VOICE LOFI", {8, 11, 5, 3}, {1, 4, 7, 10}, 0};
     sc[n++] = (scen_t){"TRIO WHEEL PHASE FM6", {6, 7, 2, ENGI_FM6}, {1, 4, 7, 10}, 0};
+#if FELUCCA_PHYS
     sc[n++] = (scen_t){"PHYS morph + DRUM GRAIN ANALOG", {ENGI_PHYS, ENGI_DRUM, 8, 0}, {2, 1, 3, 5}, 1};
+#else
+    sc[n++] = (scen_t){"WHEEL morph + DRUM GRAIN ANALOG", {7, ENGI_DRUM, 8, 0}, {2, 1, 3, 5}, 1};
+#endif
 #if FELUCCA_SLICE
     sc[n++] = (scen_t){"SAMPLE SLICE GRAIN PHASE", {ENGI_SAMPLE, 13, 8, 2}, {2, 1, 3, 5}, 0};
     sc[n++] = (scen_t){"SLICE FM6 SAMPLE DRUM", {13, ENGI_FM6, ENGI_SAMPLE, ENGI_DRUM}, {0, 2, 3, 4}, 0};
