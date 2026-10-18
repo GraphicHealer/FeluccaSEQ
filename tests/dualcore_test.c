@@ -142,7 +142,11 @@ int main(void)
 #else
     sc[n++] = (scen_t){"GRAIN FM6 ANALOG DRUM", {8, ENGI_FM6, 0, ENGI_DRUM}, {1, 4, 7, 0}, 0};
 #endif
+#if FELUCCA_VOICE
     sc[n++] = (scen_t){"GRAIN NOISE VOICE LOFI", {8, 11, 5, 3}, {1, 4, 7, 10}, 0};
+#else
+    sc[n++] = (scen_t){"GRAIN NOISE PHASE LOFI", {8, 11, 2, 3}, {1, 4, 7, 10}, 0};
+#endif
     sc[n++] = (scen_t){"TRIO WHEEL PHASE FM6", {6, 7, 2, ENGI_FM6}, {1, 4, 7, 10}, 0};
 #if FELUCCA_PHYS
     sc[n++] = (scen_t){"PHYS morph + DRUM GRAIN ANALOG", {ENGI_PHYS, ENGI_DRUM, 8, 0}, {2, 1, 3, 5}, 1};

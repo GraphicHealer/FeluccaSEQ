@@ -19,7 +19,11 @@
  *
  * Voice state: ph[0] glottal phase, ph[1..2] F4 y1 / y2, s[0..5] F1..F3
  * y1 / y2, s[6] tilt, s[7] TALK progress (Q24, bits 0..24) and the note's
- * random vowel (bits 25..31). Formant key tracking is fixed at 30 / 127. */
+ * random vowel (bits 25..31). Formant key tracking is fixed at 30 / 127.
+ *
+ * FELUCCA_VOICE=0 (the FeluccaSEQ default) builds without it: index 5 stays reserved (ENG_VOICE_GONE,
+ * never selectable, silent); a stored VOICE track keeps engine 5 and comes back whole with FELUCCA_VOICE=1. */
+#if FELUCCA_VOICE
 #define FMT_FOLOW 30
 #define FMT_TALK_MASK 0x01FFFFFF
 
@@ -238,3 +242,23 @@ static const engine_t ENG_FORMANT = {
     .knob = {P_E0, P_E4, P_E5, P_E2},
     .poly = 4,
 };
+#else
+/* engine 5 without the DSP (as engine 1's ENG_FM4_GONE, 9's ENG_PHYS_GONE) */
+static void voice_gone_note_on(struct track *t, voice_t *v) { (void)t; (void)v; }
+static void voice_gone_render(struct track *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
+{
+    (void)t; (void)v; (void)out; (void)n; (void)m;
+}
+static const engine_t ENG_VOICE_GONE = {
+    .name = "-",
+    .page_title = {"-", "-"},
+    .edit = {
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+        {"-", F_INT, 0, 0, 0, 0, 0}, {"-", F_INT, 0, 0, 0, 0, 0},
+    },
+    .note_on = voice_gone_note_on,
+    .render = voice_gone_render,
+    .knob = {P_E0, P_E4, P_E5, P_E2},
+};
+#endif

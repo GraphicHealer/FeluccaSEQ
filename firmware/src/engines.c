@@ -53,7 +53,11 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_PHASE,                  /* 2 */
     &ENG_LOFI,                   /* 3 */
     &ENG_SAMPLE,                 /* 4 */
+#if FELUCCA_VOICE
     &ENG_FORMANT,                /* 5 VOICE (eng_formant.c: "voice" is a sounding note in voice.c) */
+#else
+    &ENG_VOICE_GONE,             /* 5: reserved (VOICE, cut in FeluccaSEQ: its sounds keep the index, play silent) */
+#endif
     &ENG_TRIO,                   /* 6 */
     &ENG_WHEEL,                  /* 7 */
     &ENG_GRAIN,                  /* 8 */
@@ -122,7 +126,11 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
 #if FELUCCA_FM4
     1,                           /* DIGITAL */
 #endif
-    2, 3, 4, 5, 6, 7, 8,         /* PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN */
+    2, 3, 4,                     /* PHASE LOFI SAMPLE */
+#if FELUCCA_VOICE
+    5,                           /* VOICE */
+#endif
+    6, 7, 8,                     /* TRIO WHEEL GRAIN */
 #if FELUCCA_PHYS
     9,                           /* PHYS */
 #endif
@@ -137,7 +145,8 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
  * eng_vis(n), e's place among them eng_rank(e), the next / previous one eng_step(e, dir) (wraps) */
 static int eng_ok(uint32_t e)
 {
-    return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL) && (FELUCCA_PHYS || e != ENGI_PHYS);
+    return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL) && (FELUCCA_PHYS || e != ENGI_PHYS) &&
+           (FELUCCA_VOICE || e != ENGI_VOICE);
 }
 static uint32_t eng_vis(uint32_t n) { return ENGINE_ORDER[n % NENG_SHOWN]; }
 static uint32_t eng_rank(uint32_t e)

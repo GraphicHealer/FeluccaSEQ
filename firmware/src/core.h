@@ -25,6 +25,10 @@
 #define FELUCCA_PHYS 0           /* the PHYS engine (eng_phys.c): cut in FeluccaSEQ, its index 9 reserved; kept in the
                                   * tree, FELUCCA_PHYS=1 builds it. Stored PHYS tracks keep engine 9 and play silent */
 #endif
+#ifndef FELUCCA_VOICE
+#define FELUCCA_VOICE 0          /* the VOICE engine (eng_formant.c): cut in FeluccaSEQ, its index 5 reserved; kept in
+                                  * the tree, FELUCCA_VOICE=1 builds it. Stored VOICE tracks keep engine 5, play silent */
+#endif
 #ifndef FELUCCA_CPU2
 #define FELUCCA_CPU2 1           /* the second core (src/felucca.c): 1 = built in, MENU > 2ND CORE ON lets it render
                                   * some parts; 0 = none of it */
@@ -35,8 +39,9 @@
 #define C1_PI(t) ((uint32_t)((t) - trk) % C1_NP)   /* a part's copy */
 #define NENGINES (13 + FELUCCA_SLICE)   /* SLICE (13) comes last: the other engines keep their numbers */
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
-#define NENG_SHOWN (NENGINES - !FELUCCA_FM4 - !FELUCCA_PHYS)   /* the engines one can pick: PRESETS, the EDIT
-                                                * layer, the editor, in the display order of engines.c ENGINE_ORDER */
+#define NENG_SHOWN (NENGINES - !FELUCCA_FM4 - !FELUCCA_PHYS - !FELUCCA_VOICE)   /* the engines one can pick:
+                                                * PRESETS, the EDIT layer, the editor, in ENGINE_ORDER's display
+                                                * order (engines.c) */
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 
 /* ------------------------------------------------------- parameters --- */
@@ -111,6 +116,7 @@ static void params_by_count(int16_t *out, const int16_t *in, uint32_t np, const 
 }
 
 /* engine indices the stores name (engines.c ENGINES[]: append-only) */
+#define ENGI_VOICE 5u            /* reserved without FELUCCA_VOICE: never selectable (eng_ok) */
 #define ENGI_PHYS 9u
 #define ENGI_DRUM 10u
 /* PHYS MODEL DRUM (MODEL 4, before 1.0) -> the DRUM engine, its E values in place: {MODEL, TUNE, TONE, DECY,
