@@ -17,8 +17,9 @@ Two moves:
 - **Upstream is now dormant** (occasional maintenance only, no guaranteed reviews). Drift risk is low; conversely the Felucca-Engines PR path is effectively closed — if shared engine code (`firmware/engines/`, a separate MIT repo) ever needs changes, fork it and repoint `.gitmodules`. Compile-gating an engine like WHEEL can be done in `engines.c` without touching the submodule.
 - v1.6 already includes: conditional steps (`1:2` ... `4:4`, FILL, !FILL), EUCLID, DOUBLE and HALF in SEQ TOOLS, a piano roll that follows the playhead, QNT SEQ+T, a MIDI channel per track, and humanize (VEL, TIME) in the MOD matrix. These are the starting point, not things to build.
 - Sizes: `felucca-1.6-app.bin` was 508,108 bytes; the measured v1.6.1 build is **511,452 B** against an XIP budget of 581,564 B (`firmware/app.ld`) — **~68.5 KB headroom**. RAM at v1.6.1: `.data`+`.bss` 60,984 / 73,728 B; `POOL` 328,896 / 368,640 B. The bundled samples alone are 126,244 B of ADPCM. (The app was about 425 KB at 1.0.4, so it has been growing.)
+- **After the FeluccaSEQ cuts** (CC0 data, SLICE, PHYS, VOICE, SAMPLE, GRAIN — all `FELUCCA_*=1` restorable, indices reserved): app **353,876 B** (−157.6 KB, XIP ~243 KB free), `.data`+`.bss` 55,544 / 73,728 B (**~18.2 KB free**), `POOL` 284,640 / 368,640 B (**~84 KB free**; `eng_mem` shrank 51.6 → 7.3 KB once PHYS and GRAIN stopped sizing `ENG_MEM_PART`).
 - **Measured memory map** (`tools/size_report.py`, v1.6.1): `.data`/`.bss` only **8.8 KB free** — it already holds the sequencer state (`trk` 7,296 B = 4×1,824 B track_t, `chain` 13,096 B = 4 pattern snapshots for SONG). `POOL` 39.8 KB free, but its elephant is `dly_buf` **131 KB** (the tempo delay line), then `cv_px` 59.5 KB, `eng_mem` 51.6 KB, `sl_buf` 32.8 KB. `NOINIT` is 99% full (`proj_slot` 15,360 B).
-- **RAM, not flash, is the wall.** Step data costs in two places: `trk` steps (704 B/track today) and `chain.source` snapshots (~2.8 KB/track). NSTEP 128 costs ~+8.4 KB in `.data`/`.bss` — it does not fit in the 8.8 KB free. Capacity work must move sequencer state to `.pool` or free `.bss` (slicer/sample buffers, the delay line) first.
+- **RAM, not flash, is the wall.** Step data costs in two places: `trk` steps (704 B/track today) and `chain.source` snapshots (~2.8 KB/track). NSTEP 128 costs ~+8.4 KB in `.data`/`.bss` — it now fits the ~18.2 KB free (was 8.8 KB), and `POOL` has ~84 KB free if bigger growth needs relocation. `dly_buf` (131 KB, kept — the delay is wanted) remains the single largest RAM object if more is ever needed.
 - Licence: GPL-3.0-only (the engines submodule is MIT). Keep copyright notices and `LICENSES/`, add my own copyright line, carry the GPL-3.0-only SPDX header on new files, and release source if I ever distribute binaries.
 - Build host: **Linux x86-64**, where the JieLi pi32v2 toolchain runs natively (no Docker; Docker is only needed on macOS). `tools/get_toolchain.sh` installs the toolchain (default `~/.jieli/toolchain`); `JIELI_TOOLCHAIN` and `AC79_SDK` override locations (default SDK `~/fw-AC79_AIoT_SDK`, a gitee clone, tag `AC79NN_SDK_V1.2.1_2023-12-13`). `AC79_SDK` must also be set for `tests/run_tests.sh`. Build needs Python Pillow + fontTools; `git submodule update --init` is required first.
 - **Known baseline artifact (host gcc 15.2.1):** `tests/v16_test`'s "CUSTOM stored (not in use): COLOR has 11 values" check FAILs under gcc `-O1` — the compiler CSEs the pure `menu_n` call across `cpal_store`, which writes the flag byte it reads (ipa-modref misses it). Firmware logic is correct; `-fno-ipa-modref` or `-fno-ipa-pure-const` makes it pass. Not a real bug; don't re-investigate. Host sanitizers (`libubsan`, `libasan`, `libtsan` packages) are needed for the UBSan/ASan/TSan test binaries.
@@ -42,9 +43,9 @@ Measure first, then cut. Cuts come in three severities — **data, code, feature
 
 | Area | Why it is a candidate |
 | --- | --- |
-| The bundled CC0 sample sets (data only) | **Measured: 126,244 B of ADPCM — ~24% of the app.** The build works without them: SAMPLE keeps its USR1-3 upload slots and SLICE keeps BREAK + USR, losing only its PIANO source (it shares the PIANO zone). Dropping the data alone nearly triples flash headroom (~68.5 → ~192 KB) without cutting a single engine's code. |
-| SAMPLE, GRAIN, SLICE engine code | DSP code and state, on top of the data. `FELUCCA_SLICE=0` is already a supported flag — use it as the template for gating the others in `engines.c`. |
-| PHYS, VOICE | DSP code and state |
+| The bundled CC0 sample sets (data only) | **Done** (`FELUCCA_CC0=0` default, 4fa184c): the 126,244 B of ADPCM gone, `FELUCCA_CC0=1` restores it. |
+| SAMPLE, GRAIN, SLICE engine code | **Done** (`FELUCCA_SLICE`/`FELUCCA_SAMPLE`/`FELUCCA_GRAIN=0`, abf9d2e / 75b7f0b): reserved indices, silent stubs. The USR1-3 user slots keep uploading — the slot layer (scan, backup) outlives any one engine build. |
+| PHYS, VOICE | **Done** (`FELUCCA_PHYS`/`FELUCCA_VOICE=0`, 17e7c3d / e08de4e): reserved indices 9 / 5, silent stubs. |
 | USB serial console (`FELUCCA_CDC=0`) | Build flag, cheap — but the console is the diagnostics channel; keep it during bring-up, cut it for release builds only if the bytes are needed |
 | `FELUCCA_CPU2=0` | Diagnostic lever: gives back 1.6's one-core code and RAM, at the cost of dual-core render headroom a busier sequencer may want |
 
@@ -61,7 +62,7 @@ Keep (decided):
 - **The cosmetic and ease-of-use features**: palettes (including CUSTOM), STYLE, LARGE, animations and LED modes, HELP, HOME TRACKS / LEVELS, the extra ARP modes. Individually small, and they make the device easier to use.
 - DRUM (fully synthesized, no samples), ANALOG, the flash save code, the OTA / update entry, the loader, USB MIDI
 
-With FM6, the reverbs and the cosmetics staying, the savings come mainly from the sample data, PHYS, VOICE and the serial console (WHEEL only if needed). The delay and reverb RAM is not freed, so any bigger patterns have to be budgeted against the RAM that remains. Measure before assuming there is room.
+With FM6, the reverbs and the cosmetics staying, the savings came mainly from the sample data + DSP, PHYS, VOICE and GRAIN — done; the serial console and WHEEL remain unless a later feature needs them. The delay and reverb RAM is not freed (`dly_buf` 131 KB stays by choice), so any bigger patterns have to be budgeted against the ~84 KB of `POOL` and ~18.2 KB of `.bss` that remain.
 
 Removal strategy: **do not delete engine IDs.** Keep the enum and the stored sound format, compile out the DSP, and map a removed engine to a fallback (for example ANALOG). Old presets and projects still load. Decide later whether to drop the fallback.
 
@@ -112,7 +113,7 @@ Ideas, roughly by payoff against UI cost — **capacity first** (decided), the r
 
 - ~~Real flash and RAM limits~~ — answered from `app.ld`: ~73 KB flash headroom; 72 + 360 + 16 KiB RAM. Still open: where the bytes go (needs the size report)
 - Whether freed app flash can become data flash, or whether the loader fixes the partitions
-- Whether cutting only the sample engines, PHYS, VOICE and the serial console (before touching WHEEL) frees enough flash and RAM for the sequencer goals; if not, the next candidates are decided after the size report, not before. New option on the table: dropping only the bundled sample *data* while keeping SAMPLE's user slots
+- ~~Whether cutting only the sample engines, PHYS, VOICE and the serial console (before touching WHEEL) frees enough flash and RAM for the sequencer goals~~ — answered: yes. The five cuts above (data + SLICE + PHYS + VOICE + SAMPLE/GRAIN, without touching WHEEL or the console) free ~243 KB flash, ~18.2 KB `.bss`, ~84 KB `POOL`; NSTEP 128 fits. The serial console and WHEEL stay for now; revisit only if a later feature needs their bytes.
 - ~~Whether the sequencer already sends MIDI out~~ — answered: no (plumbing yes, step playback no; see Goals)
 - Whether `FELUCCA_UART` (TRS MIDI IN) actually works on hardware
 - ~~`float`/`double`~~ — answered: banned, all fixed point. ~~Watchdog~~ — ~8 s. ~~Audio budget~~ — 2.9 ms halves, shed at 85%. Still open: 64-bit division cost, screen update cost
