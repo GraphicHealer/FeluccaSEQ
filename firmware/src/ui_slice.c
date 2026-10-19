@@ -13,14 +13,14 @@
  * Edits are for a user slot (USR1..3: SRC); BREAK and PIANO show their slices only, a source with no material (it
  * plays a sine) says SAMPLE NOT FOUND (the no-file icon). The first edit takes
  * the slices shown into the slot's MAN table (eng_slice.c) and sets DIV to MAN; later edits change that table (the
- * audio side switches tables between notes). Leaving the page saves them with the sample (slice_store.c, once
+ * audio side switches tables between notes). (FeluccaSEQ: no user slots, nothing to save.) Leaving the page
  * stopped). Included by ui.c (before the action pages); the cards: ui_draw.c, the waveform: ui_graph.c. */
 #if FELUCCA_SLICE
 #define SP_COLS 216u                                 /* the waveform's columns (the panel's x 12..227) */
 static struct {
     uint8_t sel;                                     /* the marker: slice 0..n - 1, n = END */
     uint8_t env_src;                                 /* what lo / hi were decoded for */
-    uint32_t env_a, env_b, env_len, env_gen;         /* (env_gen: smp_user_gen, a re-upload of the same length) */
+    uint32_t env_a, env_b, env_len;
     int8_t lo[SP_COLS], hi[SP_COLS];                 /* per column: smallest / largest sample >> 9 */
 } sp;
 
@@ -119,7 +119,6 @@ static void slice_edit_end(uint32_t k)
         TSEL->p[P_E1] = SLC_DIV_MAN;                 /* (the editor sees it as any change of the value) */
         ui_message("DIV MAN");
     }
-    slc_man_save |= (uint8_t)(1u << k);              /* to flash when the page is left (slice_store.c) */
 }
 
 /* KNOB 1: the marker; KNOB 2: move it */
@@ -158,7 +157,7 @@ static int slice_act_ready(uint32_t c)
 {
     uint32_t src, div, n = slice_count(), j = slice_sel();
     const slc_src_t *s = slice_src(&src, &div);
-    if (!s || slc_slot_of(s) >= SMP_USER_SLOTS || j >= n)   /* (BREAK, PIANO: no edits) */
+    if (!s || slc_slot_of(s) >= SLC_NUSR || j >= n)   /* (BREAK, PIANO: no edits) */
         return 0;
     if (c == 3u)
         return j > 0u;
@@ -228,8 +227,7 @@ static void slice_env(uint32_t a, uint32_t b)
     const slc_src_t *s = slice_src(&src, &div);
     slc_dec_t d;
     len = s ? s->len : 0u;
-    if (!s || (sp.env_a == a && sp.env_b == b && sp.env_len == len && sp.env_src == src &&
-               sp.env_gen == smp_user_gen))
+    if (!s || (sp.env_a == a && sp.env_b == b && sp.env_len == len && sp.env_src == src))
         return;
     slc_dec_at(&d, a, slc_state_at(s, a));
     for (c = 0; c < SP_COLS; c++) {
@@ -246,7 +244,6 @@ static void slice_env(uint32_t a, uint32_t b)
     sp.env_a = a;
     sp.env_b = b;
     sp.env_len = len;
-    sp.env_gen = smp_user_gen;
     sp.env_src = (uint8_t)src;
 }
 
@@ -268,7 +265,7 @@ static void slice_time(char *b, uint32_t n)
 /* graph_signature: what the page shows */
 static uint32_t slice_sig(void)
 {
-    uint32_t n = slice_count(), i, h = n * 131u + slice_sel() * 7919u + smp_user_gen * 104729u;
+    uint32_t n = slice_count(), i, h = n * 131u + slice_sel() * 7919u;
     for (i = 0; i <= n; i++)
         h = (h ^ slice_mark(i)) * 16777619u;
     return h;

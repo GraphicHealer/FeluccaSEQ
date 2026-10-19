@@ -569,16 +569,11 @@ static struct {
 static uint32_t sample_wave_zone(const track_t *t)
 {
     uint32_t si = (uint32_t)t->p[P_E0] % SMP_NALL, i, zi = 0xFFFFu;
-    if (si < SMP_NSETS) {
+    {   /* (the user slots of a stored si are gone: SMP_NALL is SMP_NSETS) */
         const smp_set_t *set = &SMP_SETS[si];
         for (i = 0; i < set->nz; i++)
             if (last_note >= SMP_ZONES[set->z0 + i].lo && last_note <= SMP_ZONES[set->z0 + i].hi) zi = set->z0 + i;
         if (zi == 0xFFFFu && set->nz) zi = set->z0;
-    } else {
-        uint32_t k = si - SMP_NSETS;
-        for (i = 0; i < usr_nz[k]; i++)
-            if (last_note >= usr_zone[k][i].lo && last_note <= usr_zone[k][i].hi) zi = 0x8000u | k << 5 | i;
-        if (zi == 0xFFFFu && usr_nz[k]) zi = 0x8000u | k << 5;
     }
     return zi;
 }
@@ -586,8 +581,8 @@ static uint32_t sample_wave_zone(const track_t *t)
 static void sample_wave_tick(const track_t *t)
 {
     uint32_t zi = sample_wave_zone(t), key = zi + ((uint32_t)last_note << 16), i;
-    if (key != sample_wave.key || sample_wave.gen != smp_user_gen || !sample_wave.zone) {
-        sample_wave.key = key; sample_wave.gen = smp_user_gen;
+    if (key != sample_wave.key || !sample_wave.zone) {
+        sample_wave.key = key;
         sample_wave.zone = zi == 0xFFFFu ? 0 : smp_zone(zi);
         sample_wave.pos = 0; sample_wave.pred = sample_wave.index = 0;
         sample_wave.peak = 1; sample_wave.ready = 0;

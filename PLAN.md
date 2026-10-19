@@ -96,7 +96,45 @@ Ideas, roughly by payoff against UI cost — **capacity first** (decided), the r
 
 ## Decisions
 
-- **Project format: free to break.** FeluccaSEQ versions the project format; stock firmware will show FeluccaSEQ projects as empty slots and vice versa. No backward-compat conversion code. (The engine-ID fallback still stands — that is about *sounds* loading safely, not project compatibility.)
+- **Project format: free to break.** FeluccaSEQ versions the project format; stock firmware will show FeluccaSEQ projects as empty slots and vice versa. **Clean break decided (FSQ1):** the FUN1–FUN10 readers are deleted, not ported — migration moves to the web editor, which will accept old-format dumps and convert them. (The engine-ID fallback still stands — that is about *sounds* loading safely, not project compatibility.)
+- **Pattern library over bigger records (direction B).** Patterns become independent flash objects referenced by ID, instead of growing the single project record. Opens up pattern count, chain length and step length independently, enables a pattern selector in the song editor and a free-space indicator in SAVE, and removes the 4-slot/`chain.source` snapshot model.
+- **User sample slots removed entirely.** All three 80 KiB slots and the editor upload path go; the 240 KiB region `0xA0000..0xDBFFF` becomes the pattern library. SAMPLE/GRAIN compat builds keep their engine code but have no flash slots to play from.
+
+## Data model (FSQ1)
+
+The stock project record is a 3,840 B fixed struct at 99.7% capacity (13 B spare): 4 tracks × (111 params + 64 packed steps) + chain + motion + 512 B of always-written FM6 patches. NSTEP=128 alone needs +2,304 B — impossible. FSQ1 splits it:
+
+**Flash map** (replaces `storage.c`'s map comment):
+
+| Region | Contents |
+|---|---|
+| `0x97000..0x9EFFF` | song slots: 4 × A/B × 4 KB (unchanged location; record shrinks, slot count may grow into it) |
+| `0xA0000..0xDBFFF` | **pattern library**: 30 A/B sector-pair "pages" (was 3 × 80 KiB user samples) |
+| `0xDC000..0xDFFFF` | user preset banks (unchanged) |
+| `0x9F000 / 0xFE000`, `0xE5000/0xE6000`, `0xE7000`, `0xFC000/0xFD000` | UPFM6, autosave, FM6 voice bank, settings (unchanged) |
+
+**Pattern page** — the `up_bank` model scaled up: one A/B sector-pair object; page body = directory `{id, off, len}` at the tail + variable-length records packed from the front. A page loads whole into `POOL` RAM, is modified, erased and rewritten as one unit — same torn-write safety as today, no new machinery. Pattern ID = 16 bits: high byte page index (0–29), low byte a page-local handle that survives repacking (never reused).
+
+**Pattern record** — one track's phrase, self-contained:
+
+- `name[8]`, flags/version
+- timing: `slen` (≤128), `sdiv`, `sswing`, `sgate`, `sqnt`
+- step bitmap `ceil(NSTEP/8)` + packed steps (today's 9 B encoding) for used steps only — ~210 B for a typical 16-step phrase, ~600 B dense 64-step, ~1.2 KB for a dense 128-step
+- its own automation + parameter locks: `{step, param, value}` 3 B each (step ≤127, 7 bits; `MOTION_LOCK` stays on `param` bit 7). Per-pattern cap ~32 events
+
+Capacity: ~150–500 patterns at typical densities; `patlib_space()` reports bytes/patterns free for the SAVE indicator.
+
+**Song record** — sounds + structure only:
+
+- globals `g[G_COUNT]`, per-track sound (`engine`, `preset`, `p[P_COUNT]` packed, `mch`), FM6 patch **only for FM6 tracks** (flag bit — recovers the 512 B unconditional block)
+- chain rows `{pat_id[4], repeat}` 9 B/row — room for 32+ rows; `0xFFFF`-style sentinels for silent lanes
+- name + CRC. ≈1.3 KB typical.
+
+**RAM:** `chain.source[4]` (13 KB `.bss` of 4-track snapshots) goes away; `chain_apply` resolves pattern IDs instead — play straight from XIP where the access pattern allows, else a small per-track play buffer. The live `trk[].step` buffer stays the edit/record surface; the single live `motion` store stays for it, with per-track stores loaded at section boundaries during song playback.
+
+**Migration:** none in firmware. An old project reads invalid → shows EMPTY; the editor's backup/dump path gets an FSQ1 counterpart and a FUN10→FSQ1 converter on the web side.
+
+**Implementation order:** (1) remove user-sample slots + editor upload path, (2) `patlib.c` storage + host test, (3) chain on pattern IDs + drop `chain.source`, (4) FSQ1 song format + delete FUN readers, (5) motion into patterns + widen step field for NSTEP 128, (6) UI: pattern selector + SAVE space indicator, (7) NSTEP 128, (8) editor protocol + web converter.
 
 ## Plan
 
@@ -106,7 +144,7 @@ Ideas, roughly by payoff against UI cost — **capacity first** (decided), the r
 4. Rebrand visible strings only (ABOUT, INFO, version). Do not rename internals, since that makes every upstream merge a conflict. Stamp builds with `./build.sh --release 1.0-seq` (numeric `X.Y` required; gives `FM-1_910` / `v1.0-seq`).
 5. Prove the install and recover loop on the Linux box with a harmless build first (`tools/fm1_install.py`, needs `mido` + `python-rtmidi`). Have the XIAO RP2040 for FM-1-transporter recovery on hand before the first risky flash — on order.
 6. Cut, one feature or engine per commit, regenerating `tests/golden.txt` (`GOLDEN_UPDATE=1`) and the budget files (`BUDGET_UPDATE=1`) after each so a hash change traces to one cut.
-7. Design the new project data model (versioned format, no stock compatibility — see Decisions) before writing UI.
+7. Build the FSQ1 data model (see Data model): pattern library first, then chain-on-pattern-IDs, then the new song record — landing the format before the UI that depends on it.
 8. Add sequencer features one at a time, each checked in the browser emulator (`web/emu/`) and covered by a host test.
 
 ## Open questions

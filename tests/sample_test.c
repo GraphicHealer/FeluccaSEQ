@@ -11,8 +11,6 @@
  *    piano): a user who installed it keeps it; in USR1 it is valid and renders bit for bit as SET 0 at every key.
  * (Bit identity with 1.1.5.1 itself: tests/golden.txt's SAMPLE / GRAIN PIANO renders are 1.1.5.1's hashes.) */
 #include <stdint.h>
-static uint32_t host_slots[3u * 0x14000u / 4u];          /* USR1..3, as the flash at 0xA0000 */
-#define SMP_USER_XIP(k) ((const uint8_t *)host_slots + (k) * SMP_USER_SIZE)
 #define main hostsim_main
 #include "hostsim.c"
 #undef main
@@ -228,38 +226,6 @@ int main(int argc, char **argv)
           SLC_PIANO.len == 16537u && SLC_PIANO.rate == 32768u && SLC_PIANO.seg[0].off == SMP_ZONES[2].off &&
           SLC_PIANO.len == SMP_ZONES[2].n);
 
-    /* 3: PIANO HD (1.2's file of the old piano), from a user slot: as SET 0, bit for bit */
-    snprintf(path, sizeof path, "%s.hdr", argv[1]);
-    if (load(path, host_slots, SMP_USER_DATA) != (long)sizeof(smp_user_hdr_t)) {
-        printf("sample: no %s (gen_samples.py --user-slot PIANO \"PIANO HD\" ...)\n", path);
-        return 1;
-    }
-    snprintf(path, sizeof path, "%s.bin", argv[1]);
-    if (load(path, (uint8_t *)host_slots + SMP_USER_DATA, SMP_USER_SIZE - SMP_USER_DATA) <= 0)
-        return 1;
-    smp_user_scan(0);
-    {
-        /* both from the same state (a fork each: the mix keeps state from render to render) */
-        int32_t *ref = mmap(0, 2u * sizeof buf, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0), *usr = ref + FS * SECS;
-        const smp_zone_t *z = &usr_zone[0][2];
-        uint32_t same = 0;
-        check("PIANO HD: USR1 holds 5 zones (roots 36 .. 84, 22,050 Hz, 0.75 s), 41 KB of a 79.5 KB slot",
-              usr_nz[0] == 5u && usr_zone[0][0].root16 == 36 * 16 && usr_zone[0][4].root16 == 84 * 16 &&
-              z->root16 == 60 * 16 && z->rate == 32768u && z->n == 16537u);
-        if (ref == MAP_FAILED)
-            return 1;
-        for (i = 0; i < sizeof NOTES; i++) {
-            render_child(0, NOTES[i], ref);
-            render_child((int16_t)SMP_NSETS, NOTES[i], usr);
-            memcpy(buf, usr, sizeof buf);
-            same += !memcmp(ref, usr, sizeof buf) && rms(0, FS / 2u) > 100.0;
-            snprintf(path, sizeof path, "piano_hd_%02u", NOTES[i]);
-            wav_out(dir, path);
-        }
-        snprintf(m, sizeof m, "PIANO HD in USR1 (installed under 1.2 .. 1.4.1) plays as SET 0, bit for bit (%u of %u keys)",
-                 same, (uint32_t)sizeof NOTES);
-        check(m, same == sizeof NOTES);
-    }
     printf("sample: %s\n", fails ? "FAILED" : "all checks ok");
     return fails != 0;
 }

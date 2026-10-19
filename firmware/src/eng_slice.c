@@ -16,8 +16,8 @@
  * at a known decoder state, so each source keeps a table (slc_src_t): the states at the 128 grid
  * points k * len / 128 (every equal slice starts on one, and they are the reverse checkpoints) and
  * up to 32 AUTO starts with their states. BREAK's and PIANO's tables are written at build time (BREAK's
- * hits are its AUTO slices; PIANO has one, the attack); a user slot's is computed by slc_scan when the slot becomes valid
- * (smp_user_scan: boot, upload end; main loop, never the audio ISR): two decoding passes; per hop
+ * hits are its AUTO slices; PIANO has one, the attack); a user slot's was computed by slc_scan when the slot became valid
+ * (the slots are gone with them: two decoding passes; per hop
  * of 32 samples the peak of the first difference (hats, snares, clicks stand out, a kick's tail
  * does not) and the plain peak (low hits); an onset is a hop where either rises 1.75x over its
  * follower (~23 ms / ~93 ms, so a low tone's cycles are no rises), above 1/12 (1/8) of its
@@ -60,7 +60,9 @@ typedef struct {
 
 static const slc_src_t SLC_BREAK = SLC_BREAK_INIT;
 static const slc_src_t SLC_PIANO = SLC_PIANO_INIT;
-static slc_src_t slc_usr[SMP_USER_SLOTS];
+/* FeluccaSEQ: the USR1..3 sources are gone with the user slots (their SRC numbers 1..3 stay
+ * reserved: a stored one slices nothing, the sine plays). SLC_NUSR is the index space's width. */
+#define SLC_NUSR 3u
 typedef int16_t slc_rbuf_t[NVOICE][SLC_RB];           /* reverse windows, one per part voice (the part's eng_mem) */
 ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
@@ -76,7 +78,7 @@ enum { SLC_ONE, SLC_GATE, SLC_LOOP };
 #define SLC_DIV_MAN 5u               /* the slice starts set by hand (the SLICES page); none yet: the AUTO ones */
 #define SLC_MIN 64u                  /* MAN: the shortest slice (samples) */
 
-/* MAN slices (based on hugelton/Felucca#27 by andreahaku): per user slot, in RAM; slice_store.c keeps them in flash
+/* MAN slices (based on hugelton/Felucca#27 by andreahaku): per user slot, in RAM (FeluccaSEQ has no user slots: the tables stay empty, a stored DIV MAN plays the AUTO slices). The
  * with the sample. Two copies: the audio side reads slc_man[k][slc_man_cur[k]], the SLICES page (main loop) changes
  * the other one and then flips slc_man_cur (one byte), so a note-on never sees a half-edited table. n = 0: none */
 typedef struct {
@@ -84,10 +86,8 @@ typedef struct {
     uint32_t end;                    /* where the last slice ends (0 = the material's end) */
     uint32_t pos[SLC_AUTO], st[SLC_AUTO];     /* slice starts and their decoder states (as ast) */
 } slc_man_t;
-static slc_man_t slc_man[SMP_USER_SLOTS][2];
-static volatile uint8_t slc_man_cur[SMP_USER_SLOTS];
-static void (*slc_man_load)(uint32_t k);        /* slice_store.c: a slot was read (smp_user_scan): its stored slices */
-static uint8_t slc_man_save;                     /* bit k: slot k's slices changed, to flash (slice_store.c) */
+static slc_man_t slc_man[SLC_NUSR][2];
+static volatile uint8_t slc_man_cur[SLC_NUSR];
 
 /* the SRC of a part's sound (0..4: a stored value out of range reads as the nearest) */
 static uint32_t slc_src_of(const int16_t *p) { return (uint32_t)clamp(p[P_E0], 0, SLC_NSRC - 1); }
@@ -98,8 +98,7 @@ static const slc_src_t *slc_get(uint32_t src)
         return SLC_BREAK.len ? &SLC_BREAK : 0;
     if (src == SLC_SRC_PIANO)
         return SLC_PIANO.len ? &SLC_PIANO : 0;
-    src--;
-    return src < SMP_USER_SLOTS && usr_nz[src] && slc_usr[src].len ? &slc_usr[src] : 0;
+    return 0;                                           /* (a stored USR1..3: the slots are gone) */
 }
 
 /* ---- the ADPCM decoder over the material (segments one after the other, each from 0 / 0) */
@@ -148,16 +147,19 @@ static inline int32_t slc_dec_next(const slc_src_t *s, slc_dec_t *d)
 }
 
 static inline uint32_t slc_gpos(const slc_src_t *s, uint32_t k) { return (k * s->len) >> SLC_GRID_LOG2; }
-/* the user slot of s (0..2), SMP_USER_SLOTS for BREAK / PIANO; its MAN slices in use, 0 = none (BREAK, PIANO: none) */
+/* the user slot of s (0..2), SLC_NUSR for BREAK / PIANO; its MAN slices in use, 0 = none.
+ * FeluccaSEQ has no user slots: every source answers SLC_NUSR, the MAN tables stay empty
+ * (a stored DIV MAN plays the AUTO slices). */
 static uint32_t slc_slot_of(const slc_src_t *s)
 {
-    return s >= slc_usr && s < slc_usr + SMP_USER_SLOTS ? (uint32_t)(s - slc_usr) : SMP_USER_SLOTS;
+    (void)s;
+    return SLC_NUSR;
 }
 static const slc_man_t *slc_man_of(const slc_src_t *s)
 {
     uint32_t k = slc_slot_of(s);
     const slc_man_t *m;
-    if (k >= SMP_USER_SLOTS)
+    if (k >= SLC_NUSR)
         return 0;
     m = &slc_man[k][slc_man_cur[k] & 1u];
     return m->n ? m : 0;
@@ -202,98 +204,6 @@ static void slc_bounds_v(const slc_src_t *s, const voice_t *v, uint32_t *a, uint
     slc_bounds(s, (pk >> 16) & 7u, (pk >> 8) & 63u, a, b, st);
 }
 
-/* ---- the slice table of a user slot (main loop) */
-/* the grid states and the AUTO slices of s (len samples; s->len stays 0 meanwhile): see the top */
-static void slc_scan(slc_src_t *s, uint32_t len)
-{
-    slc_dec_t d;
-    uint32_t pos = 0, k = 0, gap = ((s->rate >> 4) * 44100u >> 12) / 20u, last = 0, h0 = 0, st0 = 0;
-    int32_t prev = 0, pkd = 0, pkr = 0, envd = 0, envr = 0, thd, thr;
-    slc_dec_at(&d, 0, 0);
-    while (pos++ < len) {                               /* pass 1: the largest step and sample */
-        int32_t x = slc_dec_next(s, &d), a = x - prev;
-        a = a < 0 ? -a : a;
-        pkd = a > pkd ? a : pkd;
-        a = x < 0 ? -x : x;
-        pkr = a > pkr ? a : pkr;
-        prev = x;
-    }
-    thd = pkd / 12;
-    thr = pkr / 8;
-    s->nauto = 1;
-    s->apos[0] = 0;
-    s->ast[0] = 0;
-    slc_dec_at(&d, 0, 0);
-    prev = 0;
-    for (pos = 0; pos < len;) {                         /* pass 2: grid states, onsets */
-        uint32_t hs = pos, hst = slc_dec_st(&d), e = len - pos > SLC_HOP ? pos + SLC_HOP : len;
-        int32_t hd = 0, hr = 0;
-        for (; pos < e; pos++) {
-            int32_t x, a;
-            while (k < SLC_GRID && ((k * len) >> SLC_GRID_LOG2) == pos)
-                s->grid[k++] = slc_dec_st(&d);
-            x = slc_dec_next(s, &d);
-            a = x - prev;
-            a = a < 0 ? -a : a;
-            hd = a > hd ? a : hd;
-            a = x < 0 ? -x : x;
-            hr = a > hr ? a : hr;
-            prev = x;
-        }
-        /* a rise of the high-passed peak (hats, snares, clicks) or of the peak (low hits: a slow
-         * follower, so a low tone's cycles do not look like rises) */
-        if (hs && ((hd > thd && hd * 4 > envd * 7) || (hr > thr && hr * 4 > envr * 7)) && h0 >= last + gap &&
-            s->nauto < SLC_AUTO) {
-            s->apos[s->nauto] = h0;                     /* from the hop before: pre-roll */
-            s->ast[s->nauto++] = st0;
-            last = h0;
-        }
-        envd = hd > envd ? hd : envd - envd / 16;
-        envr = hr > envr ? hr : envr - envr / 64;
-        h0 = hs;
-        st0 = hst;
-    }
-}
-
-/* smp_user_scan (eng_sample.c): valid 0 = the slot changes (SLICE voices on it stop), 1 = it is valid.
- * The material is at most what the slot can hold (SLC_USR_MAX samples): zones over different (overlapping) data
- * past that are left out, so a crafted header cannot make the scan (at boot too) run long */
-#define SLC_USR_MAX (2u * (SMP_USER_SIZE - SMP_USER_DATA))
-static void slc_user_scan(uint32_t k, int valid)
-{
-    slc_src_t *s = &slc_usr[k];
-    uint32_t i, j, at = 0;
-    s->len = 0;
-    RING_PUBLISH();
-    slc_man[k][0].n = slc_man[k][1].n = 0;          /* new material: its MAN slices are gone (slc_man_load: the stored) */
-    if (!valid)
-        return;
-    s->nseg = 0;
-    for (i = 0; i < usr_nz[k] && i < SLC_SEGS; i++) {
-        const smp_zone_t *z = &usr_zone[k][i];
-        for (j = 0; j < i && usr_zone[k][j].off != z->off; j++)
-            ;
-        if (j < i || !z->n)
-            continue;                                   /* the same data under another key range: once */
-        if (z->n > SLC_USR_MAX - at)
-            break;
-        s->seg[s->nseg].off = z->off;
-        s->seg[s->nseg].at = at;
-        s->seg[s->nseg++].n = z->n;
-        at += z->n;
-    }
-    if (!s->nseg)
-        return;
-    s->rate = usr_zone[k][0].rate;
-    slc_scan(s, at);
-    RING_PUBLISH();
-    s->len = at;
-    if (slc_man_load)
-        slc_man_load(k);
-}
-
-/* ---- MAN: editing (main loop, the SLICES page; based on hugelton/Felucca#27 by andreahaku). Begin with
- * slc_man_begin, change the copy it returns with move / split / join, then slc_man_commit puts it in use. */
 /* the decoder state before sample pos: decoded from the grid point at or below it */
 static uint32_t slc_state_at(const slc_src_t *s, uint32_t pos)
 {
@@ -314,7 +224,7 @@ static uint32_t slc_state_at(const slc_src_t *s, uint32_t pos)
  * SLC_MIN apart and from the end); 0 = no material in the slot */
 static slc_man_t *slc_man_begin(uint32_t k)
 {
-    const slc_src_t *s = k < SMP_USER_SLOTS ? slc_get(k + 1u) : 0;
+    const slc_src_t *s = k < SLC_NUSR ? slc_get(k + 1u) : 0;
     const slc_man_t *cur;
     slc_man_t *m;
     uint32_t i;
@@ -407,28 +317,6 @@ static uint32_t slc_man_join(slc_man_t *m, uint32_t j)
 
 /* put stored slices in use for user slot k (n starts pos[], end; 0 = the material's end); 0 = done, -1 = they do
  * not fit its material (nothing changes). Junk is refused: no sums that can wrap */
-static int slc_man_restore(uint32_t k, uint32_t n, uint32_t end, const uint32_t *pos)
-{
-    const slc_src_t *s = k < SMP_USER_SLOTS ? slc_get(k + 1u) : 0;
-    slc_man_t *m;
-    uint32_t i, e;
-    if (!s || !n || n > SLC_AUTO || end > s->len)
-        return -1;
-    e = end ? end : s->len;
-    for (i = 0; i < n; i++)
-        if (pos[i] >= e || e - pos[i] < SLC_MIN || (i && pos[i] < pos[i - 1u]) || (i && pos[i] - pos[i - 1u] < SLC_MIN))
-            return -1;
-    m = slc_man_begin(k);
-    m->n = n;
-    m->end = end;
-    for (i = 0; i < n; i++) {
-        m->pos[i] = pos[i];
-        m->st[i] = slc_state_at(s, pos[i]);
-    }
-    slc_man_commit(k);
-    return 0;
-}
-
 /* ---- voices */
 static int16_t *slc_rb(track_t *t, voice_t *v)
 {

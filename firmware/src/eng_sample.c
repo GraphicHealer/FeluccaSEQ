@@ -47,73 +47,13 @@ static uint32_t pow2_q16(int32_t d16)
 }
 #endif
 
-/* ---- user sample slots (loaded from the web editor into flash, see web/EDITOR_PROTOCOL.md)
- * 3 slots of 80 KiB at flash 0xA0000.. (Felucca data region), read through the plain XIP
- * window. Slot = header (magic, count, name, data length, CRC32) + up to 16 zones in the
- * smp_zone_t layout (off relative to the slot's data at +512) + IMA ADPCM data. */
-#include "../hal/fm1_xip.h"   /* relative: hostsim includes this file too */
-#define SMP_USER_SLOTS 3
-#define SMP_USER_BASE 0xA0000u
-#define SMP_USER_SIZE 0x14000u
-#define SMP_USER_DATA 512u
-#define SMP_USER_MAGIC 0x504D5346u                  /* "FSMP" */
-#define SMP_NALL (SMP_NSETS + SMP_USER_SLOTS)
-typedef struct {
-    uint32_t magic;
-    uint16_t version;
-    uint8_t nz, rsv;
-    char name[8];
-    uint32_t data_len, crc, rsv2[2];
-    smp_zone_t zone[16];
-} smp_user_hdr_t;                                   /* 32 + 16 x 28 = 480 B, data at +512 */
-static smp_zone_t usr_zone[SMP_USER_SLOTS][16];     /* RAM copy, off rebased onto SMP_DATA */
-static uint8_t usr_nz[SMP_USER_SLOTS];
-static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT, "USR1", "USR2", "USR3"};
+/* FeluccaSEQ: the three user sample slots (Felucca's data region 0xA0000..0xDBFFF, the FSMP
+ * headers uploaded by the web editor) are gone -- that flash is the pattern library (patlib.c,
+ * PLAN.md FSQ1). Stored SET / SRC values keep their numbers; a sound that named USR1..3 mods
+ * into the built-in range and, with no data, plays the sine below. */
+#define SMP_NALL SMP_NSETS
+static const char *const SMP_ALL_NAMES[SMP_NALL] = {SMP_SET_NAMES_INIT};
                                                 /* (params.c: a SET / SRC edit desc's names are these) */
-
-#ifndef SMP_USER_XIP                                /* host tests: a RAM image of the slots */
-#define SMP_USER_XIP(k) fm1_xip_ptr(SMP_USER_BASE + (k) * SMP_USER_SIZE)
-#endif
-static const uint8_t *smp_user_xip(uint32_t k) { return SMP_USER_XIP(k); }
-#if FELUCCA_SLICE
-static void slc_user_scan(uint32_t k, int valid);   /* eng_slice.c: SLICE's slice table of the slot */
-#else
-#define slc_user_scan(k, valid) ((void)0)
-#endif
-static uint32_t smp_user_gen;                       /* + 1 per slot scan (GRAIN: its seek index follows uploads) */
-
-/* (re)read slot k from flash: valid header -> zones usable; call after boot and after an upload
- * (main loop: SLICE scans the slot's audio here). The zones are checked in a copy: an unusable slot leaves
- * every zone of it empty (n 0: a voice still on it ends), never a half-checked one */
-static void smp_user_scan(uint32_t k)
-{
-    const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
-    smp_zone_t zt[16];
-    uint32_t i, base, nz = 0;
-    smp_user_gen++;
-    usr_nz[k] = 0;
-    slc_user_scan(k, 0);
-    if (h->magic == SMP_USER_MAGIC && h->version == 1 && h->nz && h->nz <= 16u &&
-        h->data_len <= SMP_USER_SIZE - SMP_USER_DATA) {
-        base = (uint32_t)(uintptr_t)(smp_user_xip(k) + SMP_USER_DATA) - (uint32_t)(uintptr_t)SMP_DATA;
-        for (nz = h->nz, i = 0; i < nz; i++) {
-            smp_zone_t *z = &zt[i];
-            *z = h->zone[i];
-            if (z->off > h->data_len || z->n > 2u * SMP_USER_SIZE || z->off + (z->n + 1u) / 2u > h->data_len ||
-                z->idx > 88u || !z->rate || z->rate > 4u << 16 || z->ls > z->le || z->le >= z->n || z->lo > z->hi) {
-                nz = 0;                             /* zone outside the data or malformed: slot unusable */
-                break;
-            }
-            z->off += base;
-        }
-    }
-    for (i = 0; i < 16u; i++)
-        usr_zone[k][i] = i < nz ? zt[i] : (smp_zone_t){0};
-    if (!nz)
-        return;
-    usr_nz[k] = (uint8_t)nz;
-    slc_user_scan(k, 1);
-}
 
 /* A missing sample (SAMPLE, GRAIN, SLICE: an empty or invalid user slot, a set this build has no data for) plays
  * this instead, like a hardware sampler with its sample gone: a plain sine at the note's pitch (+ d16, 1/16
@@ -134,20 +74,18 @@ static void smp_sine(int32_t *out, uint32_t n, const vmod_t *m, int32_t d16, int
 }
 #endif
 #if FELUCCA_SAMPLE || FELUCCA_GRAIN
-/* SET / SRC si (0..SMP_NALL - 1) has no sample data: an empty or invalid user slot, a built-in set without data */
+/* SET / SRC si (0..SMP_NALL - 1) has no sample data (a built-in set this build has none for) */
 static int smp_set_missing(uint32_t si)
 {
-    if (si < SMP_NSETS)
-        return !SMP_ZONES[SMP_SETS[si].z0].n;
-    return !usr_nz[(si - SMP_NSETS) % SMP_USER_SLOTS];
+    return !SMP_ZONES[SMP_SETS[si % SMP_NSETS].z0].n;
 }
 #endif
 
 #if FELUCCA_SAMPLE
-/* zone index in a voice: < 0x8000 built-in, else 0x8000 | slot << 5 | zone */
+/* zone index in a voice (a stored 0x8000 | slot << 5 | zone of a user slot that no longer exists: zone 0) */
 static inline const smp_zone_t *smp_zone(uint32_t zi)
 {
-    return zi < 0x8000u ? &SMP_ZONES[zi] : &usr_zone[(zi >> 5) & 3u][zi & 31u];
+    return zi < 0x8000u ? &SMP_ZONES[zi] : &SMP_ZONES[0];
 }
 
 /* voice: ph[0] position (samples), ph[1] fraction Q16, s[0] predictor, s[1] step
@@ -177,8 +115,8 @@ static inline int32_t sample_next(const smp_zone_t *z, voice_t *v, int loop)
 
 static void sample_note_on(track_t *t, voice_t *v)
 {
-    uint32_t si = (uint32_t)t->p[P_E0] % SMP_NALL, i, zi = 0xFFFFu, width = 128u;
-    if (si < SMP_NSETS) {                           /* a built-in set: its zones split the keyboard */
+    uint32_t si = (uint32_t)t->p[P_E0] % SMP_NALL, i, zi = 0xFFFFu;
+    {                                               /* a built-in set: its zones split the keyboard */
         const smp_set_t *set = &SMP_SETS[si];
         for (i = 0; i < set->nz; i++)
             if (v->note >= SMP_ZONES[set->z0 + i].lo && v->note <= SMP_ZONES[set->z0 + i].hi) {
@@ -186,16 +124,6 @@ static void sample_note_on(track_t *t, voice_t *v)
                 break;
             }
         v->s[4] = (int32_t)(zi == 0xFFFFu ? set->z0 : zi);
-    } else {                                        /* user slot: silent if empty; the narrowest zone plays */
-        uint32_t k = si - SMP_NSETS;
-        for (i = 0; i < usr_nz[k]; i++) {
-            const smp_zone_t *z = &usr_zone[k][i];
-            if (v->note >= z->lo && v->note <= z->hi && z->hi - z->lo <= width) {
-                zi = 0x8000u | k << 5 | i;
-                width = z->hi - z->lo;
-            }
-        }
-        v->s[4] = (int32_t)(zi == 0xFFFFu ? 0 : zi);
     }
     v->ph[0] = 0;
     v->ph[1] = 0;

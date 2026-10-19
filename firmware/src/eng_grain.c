@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* GRAIN: a granular engine over the SAMPLE material. Felucca's own design.
  *
- * Source: the SAMPLE sets (built in, IMA ADPCM in flash) and the user slots USR1..3 (XIP), the
+ * Source: the SAMPLE sets (built in, IMA ADPCM in flash; FeluccaSEQ has no user slots), the
  * same zones across the keyboard as SAMPLE: a note picks its zone, its pitch sets the grain
  * playback rate against the zone's root. Needs eng_sample.c (zones, ADPCM tables, pow2_q16).
  *
@@ -16,7 +16,7 @@
  * entry below, then up to 255 decodes skipped. A forward grain then decodes as it plays (one
  * decode per source sample); a reverse grain reads a 128-sample window that it refills from the
  * index as it moves down (about two decodes per source sample). A SRC change or a new upload into
- * the slot (smp_user_gen) rebuilds the index. A source with no data (an empty user slot, a set this build lacks)
+ * the set the build has no data for. A source with no data
  * plays a plain sine voice instead (eng_sample.c smp_sine): no grains, clearly a fallback.
  *
  * Grains: a pool of GR_NG per part, shared by its voices (each voice may hold its share of the
@@ -98,7 +98,7 @@ typedef struct {
     int16_t ipred[GR_NIDX];      /* seek index: the state before sample k * GR_SEG of a zone */
     uint8_t iidx[GR_NIDX];
     uint16_t zbase[GR_MAXZ], zcnt[GR_MAXZ], zdone[GR_MAXZ];   /* entries of a zone: first, all, built */
-    uint32_t stamp;              /* what the index was built for (user slots: smp_user_gen) */
+    uint32_t stamp;              /* what the index was built for */
     uint8_t src;                 /* SRC + 1 the index holds, 0 = none */
     uint8_t nz;
 } gr_part_t;
@@ -107,15 +107,12 @@ static int32_t gr_rng[NPART];
 
 static uint32_t gr_part(const track_t *t) { return (uint32_t)(t - trk) % NPART; }
 static gr_part_t *gr_of(const track_t *t) { return (gr_part_t *)ENG_MEM(gr_part(t)); }
-static uint32_t gr_nz(uint32_t src) { return src < SMP_NSETS ? SMP_SETS[src].nz : usr_nz[(src - SMP_NSETS) % SMP_USER_SLOTS]; }
+static uint32_t gr_nz(uint32_t src) { return SMP_SETS[src % SMP_NSETS].nz; }
 static const smp_zone_t *gr_zone(uint32_t src, uint32_t zl)
 {
-    return src < SMP_NSETS ? &SMP_ZONES[SMP_SETS[src].z0 + zl] : &usr_zone[(src - SMP_NSETS) % SMP_USER_SLOTS][zl & 15u];
+    return &SMP_ZONES[SMP_SETS[src % SMP_NSETS].z0 + zl];
 }
-static uint32_t gr_stamp(uint32_t src)
-{
-    return src < SMP_NSETS ? 0u : usr_nz[(src - SMP_NSETS) % SMP_USER_SLOTS] ? smp_user_gen : 0xFFFFFFFFu;
-}
+static uint32_t gr_stamp(uint32_t src) { (void)src; return 0u; }
 static inline uint32_t gr_rnd(const track_t *t) { return noise32(&gr_rng[gr_part(t)]); }
 static inline uint32_t gr_scale(uint32_t n, uint32_t f16) { return (n >> 16) * f16 + (((n & 0xFFFFu) * f16) >> 16); }
 
@@ -141,7 +138,7 @@ static inline int32_t gr_dec(const smp_zone_t *z, uint32_t pos, int32_t *pred, i
 static int32_t gr_find(uint32_t src, uint32_t note)
 {
     uint32_t i, nz = gr_nz(src);
-    int32_t zl = src < SMP_NSETS ? 0 : -1;
+    int32_t zl = 0;
     if (smp_set_missing(src))
         return GR_SINE;
     for (i = 0; i < nz && i < GR_MAXZ; i++) {
